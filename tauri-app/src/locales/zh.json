@@ -1,0 +1,177 @@
+{
+  "common": {
+    "ok": "确定",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "remove": "移除",
+    "close": "关闭",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "loading": "加载中",
+    "saving": "保存中",
+    "processing": "处理中",
+    "initializing": "初始化",
+    "completed": "已完成",
+    "failed": "失败",
+    "success": "成功",
+    "error": "错误",
+    "warning": "警告",
+    "info": "信息",
+    "confirm": "确认",
+    "yes": "是",
+    "no": "否",
+    "browse": "浏览",
+    "upload": "上传",
+    "download": "下载",
+    "export": "导出",
+    "import": "导入",
+    "search": "搜索",
+    "filter": "筛选",
+    "sort": "排序",
+    "refresh": "刷新",
+    "reset": "重置",
+    "clear": "清空",
+    "select_all": "全选",
+    "deselect_all": "取消全选"
+  },
+  
+  "app": {
+    "title": "涉案资金追踪分析系统",
+    "subtitle": "专业的资金流向追踪分析工具",
+    "version": "版本 {{version}}"
+  },
+  
+  "navigation": {
+    "home": "主页",
+    "analysis": "资金分析",
+    "query": "时点查询",
+    "test": "功能测试",
+    "settings": "设置",
+    "help": "帮助"
+  },
+  
+  "analysis": {
+    "title": "资金分析",
+    "algorithm": "算法",
+    "fifo": "FIFO先进先出",
+    "balance_method": "差额计算法",
+    "input_file": "输入文件",
+    "output_file": "输出文件",
+    "select_file": "选择文件",
+    "start_analysis": "开始分析",
+    "stop_analysis": "停止分析",
+    "analysis_progress": "分析进度",
+    "analysis_results": "分析结果",
+    "export_results": "导出结果",
+    "algorithm_description": {
+      "fifo": "使用先进先出原则追踪资金流向，精确计算每笔交易的资金来源",
+      "balance_method": "基于余额优先原则，个人支出优先使用个人资金，不足部分计为挪用"
+    }
+  },
+  
+  "query": {
+    "title": "时点查询",
+    "target_row": "目标行号",
+    "file_path": "文件路径",
+    "query_button": "执行查询",
+    "query_result": "查询结果",
+    "query_history": "查询历史",
+    "save_result": "保存结果",
+    "clear_history": "清空历史",
+    "row_number": "行号",
+    "timestamp": "时间戳",
+    "balance_status": "余额状态",
+    "transaction_info": "交易信息",
+    "cumulative_stats": "累计统计"
+  },
+  
+  "settings": {
+    "title": "设置",
+    "general": "常规设置",
+    "appearance": "外观设置",
+    "language": "语言设置",
+    "advanced": "高级设置",
+    "theme": "主题",
+    "light_theme": "浅色主题",
+    "dark_theme": "深色主题",
+    "auto_theme": "跟随系统",
+    "current_language": "当前语言",
+    "chinese": "中文",
+    "english": "English",
+    "auto_save": "自动保存",
+    "notifications": "通知",
+    "max_history_records": "最大历史记录数",
+    "python_environment": "Python环境",
+    "check_environment": "检查环境",
+    "environment_status": "环境状态"
+  },
+  
+  "results": {
+    "summary": "分析摘要",
+    "total_rows": "总行数",
+    "processing_time": "处理时间",
+    "algorithm_used": "使用算法",
+    "final_balance": "最终余额",
+    "personal_balance": "个人余额",
+    "company_balance": "公司余额",
+    "total_balance": "总余额",
+    "misappropriation": "挪用情况",
+    "cumulative_misappropriation": "累计挪用",
+    "net_misappropriation": "净挪用",
+    "returned_principal": "已归还本金",
+    "advance_payment": "垫付情况",
+    "cumulative_advance": "累计垫付",
+    "profit_distribution": "利润分配",
+    "personal_profit": "个人利润",
+    "company_profit": "公司利润",
+    "output_files": "输出文件"
+  },
+  
+  "errors": {
+    "system_error": "系统错误",
+    "initialization_failed": "系统初始化失败",
+    "python_not_available": "Python环境不可用，请检查Python是否正确安装",
+    "file_not_found": "找不到指定文件",
+    "file_read_error": "文件读取错误",
+    "analysis_failed": "分析失败",
+    "query_failed": "查询失败",
+    "invalid_input": "输入无效",
+    "permission_denied": "权限被拒绝",
+    "network_error": "网络错误",
+    "unknown_error": "未知错误"
+  },
+  
+  "success": {
+    "analysis_completed": "分析完成",
+    "query_completed": "查询完成",
+    "file_saved": "文件已保存",
+    "settings_saved": "设置已保存",
+    "export_completed": "导出完成",
+    "operation_completed": "操作完成"
+  },
+  
+  "warnings": {
+    "unsaved_changes": "有未保存的更改，确定要离开吗？",
+    "large_file_warning": "文件较大，处理可能需要一些时间",
+    "overwrite_warning": "文件已存在，是否覆盖？",
+    "clear_history_warning": "确定要清空所有历史记录吗？此操作不可撤销"
+  },
+  
+  "placeholders": {
+    "select_file": "请选择Excel文件",
+    "enter_row_number": "请输入行号",
+    "search_placeholder": "搜索...",
+    "no_data": "暂无数据",
+    "no_results": "无查询结果",
+    "loading_data": "正在加载数据..."
+  },
+  
+  "file_types": {
+    "excel_files": "Excel 文件",
+    "all_files": "所有文件"
+  }
+}

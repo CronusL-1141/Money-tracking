@@ -1,0 +1,56 @@
+{
+  "name": "case-fund-tracking-system",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "涉案资金追踪分析系统桌面版",
+  "author": "审计团队",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:init": "tauri init --app-name fifo-audit-desktop --window-title \"FIFO资金追踪审计系统\" --dist-dir ../dist --dev-path http://localhost:1420"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.3",
+    "@mui/lab": "^5.0.0-alpha.142",
+    "@mui/material": "^5.14.5",
+    "@mui/x-data-grid": "^6.12.1",
+    "@mui/x-date-pickers": "^6.12.1",
+    "@tauri-apps/api": "^1.5.1",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "axios": "^1.5.0",
+    "dayjs": "^1.11.9",
+    "i18next": "^23.5.1",
+    "i18next-browser-languagedetector": "^7.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-i18next": "^13.2.0",
+    "react-router-dom": "^6.15.0",
+    "recharts": "^2.8.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.1",
+    "@types/node": "^24.2.1",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitejs/plugin-react": "^4.0.3",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}

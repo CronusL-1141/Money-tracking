@@ -1,0 +1,153 @@
+name: 'Professional Release Build'
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Get version
+        run: echo "PACKAGE_VERSION=$(node -pe "require('./tauri-app/package.json').version")" >> $GITHUB_ENV
+      - name: Create release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${process.env.PACKAGE_VERSION}`,
+              name: `FIFO资金追踪审计系统 v${process.env.PACKAGE_VERSION}`,
+              body: `
+              ## 🎉 FIFO资金追踪审计系统 v${process.env.PACKAGE_VERSION}
+              
+              ### ✨ 新功能
+              - 🔄 双算法支持：FIFO + 差额计算法
+              - 📊 专业审计分析和报告生成
+              - 🔍 时点查询和历史记录管理
+              - 🌙 深浅主题和中英文切换
+              - ⚡ 高性能数据处理（支持50万行）
+              
+              ### 📦 安装方式
+              
+              **Windows用户**：
+              1. 下载 \`FIFO资金追踪审计系统_${process.env.PACKAGE_VERSION}_x64_zh-CN.msi\`
+              2. 双击安装包，按提示安装
+              3. 启动应用程序
+              
+              **便携版本**：
+              1. 下载 \`FIFO资金追踪审计系统.exe\`
+              2. 直接运行，无需安装
+              
+              ### 🔄 自动更新
+              应用程序支持自动检查更新，确保您始终使用最新版本。
+              
+              ### 📋 系统要求
+              - Windows 10/11 (64位)
+              - 内存：至少 4GB RAM
+              - 磁盘空间：至少 100MB
+              
+              ### 🛠️ 技术支持
+              如有问题请提交 Issue 或联系开发团队。
+              `,
+              draft: false,
+              prerelease: false
+            });
+            return data.id;
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: tauri-app/package-lock.json
+          
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'windows-latest' && 'x86_64-pc-windows-msvc' || '' }}
+          
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './tauri-app/src-tauri -> target'
+          
+      - name: Install frontend dependencies
+        working-directory: ./tauri-app
+        run: npm ci
+        
+      - name: Build the app
+        working-directory: ./tauri-app
+        run: |
+          npm run tauri build -- --verbose ${{ matrix.args }}
+        env:
+          # 生产环境变量
+          NODE_ENV: production
+          # 如果有代码签名证书，在这里配置
+          # WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          # WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          
+      - name: Upload Release Asset (MSI)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./tauri-app/src-tauri/target/release/bundle/msi/FIFO资金追踪审计系统_${{ env.PACKAGE_VERSION }}_x64_zh-CN.msi
+          asset_name: FIFO资金追踪审计系统_${{ env.PACKAGE_VERSION }}_x64_zh-CN.msi
+          asset_content_type: application/x-msi
+          
+      - name: Upload Release Asset (Portable EXE)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./tauri-app/src-tauri/target/release/FIFO资金追踪审计系统.exe
+          asset_name: FIFO资金追踪审计系统.exe
+          asset_content_type: application/x-msdownload
+          
+      # 生成更新信息
+      - name: Generate update signatures
+        if: matrix.platform == 'windows-latest'
+        working-directory: ./tauri-app
+        run: |
+          # 这里需要生成更新签名，实际使用时需要配置私钥
+          echo "生成更新签名文件..."
+          # npm run tauri signer generate -- -w ${{ secrets.UPDATER_PRIVATE_KEY }}

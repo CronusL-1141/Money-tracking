@@ -1,0 +1,74 @@
+# 构建产物和可执行文件
+*.exe
+*.msi
+*.dmg
+*.deb
+*.rpm
+
+# Python相关
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node.js相关
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tauri构建产物
+tauri-app/src-tauri/target/
+tauri-app/dist/
+tauri-app/build/
+
+# IDE相关
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# 日志文件
+*.log
+logs/*.log
+
+# 临时文件和缓存
+temp/
+tmp/
+cache/
+
+# 输出的分析结果文件（用户生成的）
+*_资金追踪结果.xlsx
+*_交易记录.xlsx
+投资产品交易记录_*.xlsx
+
+# 个人配置和敏感信息
+.env
+.env.local
+.env.production
+config/personal/
+
+# Windows系统文件
+~$*

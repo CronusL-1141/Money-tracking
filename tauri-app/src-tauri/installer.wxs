@@ -1,0 +1,132 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <Product 
+    Id='*' 
+    Name='FIFO资金追踪审计系统' 
+    UpgradeCode='{12345678-1234-5678-9012-123456789012}'
+    Manufacturer='审计团队'
+    Language='2052'
+    Version='$(var.Version)'
+    Codepage='65001'>
+    
+    <Package 
+      Id='*'
+      Keywords='Installer,Financial,Audit,FIFO'
+      Description='专业的FIFO资金追踪审计系统安装程序'
+      Manufacturer='审计团队'
+      InstallScope='perMachine'
+      InstallerVersion='200'
+      Languages='2052'
+      Compressed='yes'
+      SummaryCodepage='65001'
+      Comments='基于FIFO算法和差额计算法的双模式资金流向追踪审计分析系统' />
+      
+    <Media Id='1' Cabinet='audit.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1' />
+    <Property Id='DiskPrompt' Value='FIFO资金追踪审计系统安装光盘 [1]' />
+
+    <!-- 自定义属性 -->
+    <Property Id='INSTALLFOLDER'>
+      <![CDATA[
+        [ProgramFiles64Folder]FIFO资金追踪审计系统
+      ]]>
+    </Property>
+    
+    <!-- 安装条件检查 -->
+    <Condition Message='此程序需要 Windows 10 或更高版本。'>
+      <![CDATA[VersionNT >= 1000]]>
+    </Condition>
+    
+    <!-- 升级逻辑 -->
+    <MajorUpgrade 
+      Schedule='afterInstallInitialize'
+      DowngradeErrorMessage='已安装更新版本的FIFO资金追踪审计系统。安装程序现在将退出。'
+      AllowSameVersionUpgrades='yes' />
+    
+    <!-- 目录结构 -->
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFiles64Folder'>
+        <Directory Id='INSTALLFOLDER' Name='FIFO资金追踪审计系统'>
+          <Directory Id='DATADIR' Name='data'>
+            <Directory Id='INPUTDIR' Name='input' />
+            <Directory Id='OUTPUTDIR' Name='output' />
+          </Directory>
+          <Directory Id='LOGSDIR' Name='logs' />
+          <Directory Id='SRCDIR' Name='src' />
+        </Directory>
+      </Directory>
+      <Directory Id='ProgramMenuFolder' />
+      <Directory Id='DesktopFolder' />
+      <Directory Id='StartupFolder' />
+    </Directory>
+
+    <!-- 文件安装 -->
+    <ComponentGroup Id='ProductComponents'>
+      <Component Id='MainExecutable' Directory='INSTALLFOLDER'>
+        <File Id='MainExe' Source='target\release\FIFO资金追踪审计系统.exe' KeyPath='yes'>
+          <Shortcut 
+            Id='StartMenuShortcut'
+            Directory='ProgramMenuFolder'
+            Name='FIFO资金追踪审计系统'
+            Description='专业的FIFO资金追踪审计系统'
+            WorkingDirectory='INSTALLFOLDER'
+            Icon='ProductIcon' />
+          <Shortcut 
+            Id='DesktopShortcut'
+            Directory='DesktopFolder'
+            Name='FIFO资金追踪审计系统'
+            Description='专业的FIFO资金追踪审计系统'
+            WorkingDirectory='INSTALLFOLDER'
+            Icon='ProductIcon' />
+        </File>
+      </Component>
+      
+      <!-- 数据目录 -->
+      <Component Id='DataDirectories' Directory='INSTALLFOLDER'>
+        <CreateFolder Directory='DATADIR' />
+        <CreateFolder Directory='INPUTDIR' />
+        <CreateFolder Directory='OUTPUTDIR' />
+        <CreateFolder Directory='LOGSDIR' />
+        <CreateFolder Directory='SRCDIR' />
+      </Component>
+      
+      <!-- 注册表项 -->
+      <Component Id='RegistryEntries' Directory='INSTALLFOLDER'>
+        <RegistryKey Root='HKLM' Key='SOFTWARE\审计团队\FIFO资金追踪审计系统'>
+          <RegistryValue Name='InstallDir' Value='[INSTALLFOLDER]' Type='string' />
+          <RegistryValue Name='Version' Value='$(var.Version)' Type='string' />
+          <RegistryValue Name='Publisher' Value='审计团队' Type='string' />
+        </RegistryKey>
+      </Component>
+    </ComponentGroup>
+
+    <!-- 功能定义 -->
+    <Feature Id='Complete' Level='1' Title='完整安装' Description='安装所有程序功能。'>
+      <ComponentGroupRef Id='ProductComponents' />
+    </Feature>
+
+    <!-- 图标 -->
+    <Icon Id='ProductIcon' SourceFile='icons\icon.ico' />
+    <Property Id='ARPPRODUCTICON' Value='ProductIcon' />
+    
+    <!-- 控制面板信息 -->
+    <Property Id='ARPHELPLINK' Value='https://github.com/your-org/fifo-audit' />
+    <Property Id='ARPURLINFOABOUT' Value='https://github.com/your-org/fifo-audit' />
+    <Property Id='ARPNOREPAIR' Value='yes' Secure='yes' />
+    <Property Id='ARPNOMODIFY' Value='yes' Secure='yes' />
+    <Property Id='ARPCONTACT' Value='support@yourcompany.com' />
+    <Property Id='ARPCOMMENTS' Value='专业的FIFO资金追踪审计系统，支持双算法模式和自动更新。' />
+
+    <!-- UI定制 -->
+    <UI Id='MyWixUI'>
+      <UIRef Id='WixUI_InstallDir' />
+      <Property Id='WIXUI_INSTALLDIR' Value='INSTALLFOLDER' />
+      
+      <!-- 自定义对话框 -->
+      <Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='InstallDirDlg'>1</Publish>
+      <Publish Dialog='InstallDirDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg'>1</Publish>
+    </UI>
+
+    <!-- 许可协议 -->
+    <WixVariable Id='WixUILicenseRtf' Value='License.rtf' />
+  </Product>
+</Wix>
