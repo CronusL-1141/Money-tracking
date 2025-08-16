@@ -136,35 +136,13 @@ const TimePointQueryPage: React.FC = () => {
     e.stopPropagation();
     setIsDragOver(false);
 
-    try {
-      const files = Array.from(e.dataTransfer.files);
-      const excelFile = files.find(file => 
-        file.name.toLowerCase().endsWith('.xlsx') || 
-        file.name.toLowerCase().endsWith('.xls')
-      );
-
-      if (excelFile) {
-        setFilePath(excelFile.path || excelFile.name);
-        showNotification({
-          type: 'success',
-          title: '文件拖拽成功',
-          message: `已选择文件: ${excelFile.name}`,
-        });
-      } else {
-        showNotification({
-          type: 'warning',
-          title: '文件格式不支持',
-          message: '请选择Excel文件(.xlsx或.xls)',
-        });
-      }
-    } catch (error) {
-      console.error('拖拽文件处理失败:', error);
-      showNotification({
-        type: 'error',
-        title: '文件拖拽失败',
-        message: String(error),
-      });
-    }
+    // 在Tauri应用中，文件拖拽主要通过Tauri的API处理
+    // HTML5 File API在桌面应用中无法提供完整文件路径
+    showNotification({
+      type: 'info',
+      title: '文件拖拽提示',
+      message: '请直接拖拽文件到应用窗口，或点击浏览按钮选择文件',
+    });
   }, [showNotification]);
 
   const handleQuery = async () => {
