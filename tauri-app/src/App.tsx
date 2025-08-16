@@ -14,7 +14,6 @@ import SettingsPage from "./pages/SettingsPage";
 
 // 服务和类型导入
 import { checkPythonEnvironment } from "./services/pythonService";
-// import { updateService } from "./services/updateService"; // 独立版本不需要更新服务
 import { PythonEnvStatus } from "./types/python";
 
 const App: React.FC = () => {
@@ -37,19 +36,6 @@ const App: React.FC = () => {
         if (!status.python_available) {
           setError(t('errors.python_not_available'));
         }
-        
-        // 检查应用更新（后台执行，不阻塞应用启动）
-        // 注释掉自动更新检查，避免联网问题
-        /*
-        setTimeout(async () => {
-          try {
-            await updateService.autoCheckForUpdates();
-          } catch (error) {
-            console.warn('自动更新检查失败:', error);
-            // 不显示错误，避免干扰用户体验
-          }
-        }, 3000); // 延迟3秒执行，确保应用完全加载
-        */
         
       } catch (err) {
         console.error('初始化失败:', err);

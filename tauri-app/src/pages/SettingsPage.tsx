@@ -32,7 +32,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { checkPythonEnvironment } from '../services/pythonService';
-import { updateService } from '../services/updateService';
 import { PythonEnvStatus } from '../types/python';
 import { AppSettings, ThemeMode, Language } from '../types/app';
 
@@ -52,8 +51,7 @@ const SettingsPage: React.FC = () => {
   
   const [pythonEnv, setPythonEnv] = useState<PythonEnvStatus | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(false);
-  const [updateChecking, setUpdateChecking] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>('unknown');
+  const [appVersion, setAppVersion] = useState<string>('v2.0.0-独立版');
 
   // 加载设置
   useEffect(() => {
@@ -106,30 +104,7 @@ const SettingsPage: React.FC = () => {
   };
 
   // 检查更新
-  const handleCheckUpdate = async () => {
-    // 注释掉联网更新检查功能，避免独立版本出错
-    /*
-    setUpdateChecking(true);
-    try {
-      await updateService.manualCheckForUpdates();
-      showNotification({
-        type: 'success',
-        title: '更新检查',
-        message: '更新检查完成',
-      });
-    } catch (error) {
-      console.error('检查更新失败:', error);
-      showNotification({
-        type: 'error',
-        title: '更新检查失败',
-        message: String(error),
-      });
-    } finally {
-      setUpdateChecking(false);
-    }
-    */
-    
-    // 独立版本显示离线提示
+  const handleCheckUpdate = () => {
     showNotification({
       type: 'info',
       title: '独立版本',
@@ -138,18 +113,7 @@ const SettingsPage: React.FC = () => {
   };
 
   // 获取应用版本
-  const loadAppVersion = async () => {
-    // 注释掉联网获取版本，使用固定版本号
-    /*
-    try {
-      const version = await updateService.getCurrentVersion();
-      setAppVersion(version);
-    } catch (error) {
-      console.error('获取应用版本失败:', error);
-    }
-    */
-    
-    // 独立版本使用固定版本号
+  const loadAppVersion = () => {
     setAppVersion('v2.0.0-独立版');
   };
 
@@ -372,7 +336,6 @@ const SettingsPage: React.FC = () => {
                   size="small"
                   startIcon={<UpdateIcon />}
                   onClick={handleCheckUpdate}
-                  disabled={updateChecking}
                 >
                   版本信息
                 </Button>
