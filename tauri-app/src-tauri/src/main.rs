@@ -78,6 +78,7 @@ pub struct ProcessStatus {
     pub progress: Option<f32>,
     pub message: Option<String>,
     pub output_log: Vec<String>,
+    pub process_id: Option<u32>, // 添加进程ID字段
 }
 
 // 应用状态管理
@@ -98,15 +99,54 @@ async fn get_algorithms() -> Result<Vec<String>, String> {
 async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<AuditResult, String> {
     info!("Starting audit with algorithm: {}, input: {}", config.algorithm, config.input_file);
     
+    // 步骤0: 并发控制 - 检查是否已有分析在运行
+    {
+        let process_status = state.current_process.lock().await;
+        if process_status.running {
+            warn!("Analysis already running, rejecting new request");
+            return Err("分析正在进行中，请等待当前分析完成后再试".to_string());
+        }
+    }
+    
     // 步骤1: 初始化
     {
         let mut process_status = state.current_process.lock().await;
+        
+        // 添加分析会话分隔符，而不是清空所有日志
+        if !process_status.output_log.is_empty() {
+            process_status.output_log.push(format!("[{}] ===== 开始新的分析会话 =====", 
+                chrono::Utc::now().format("%H:%M:%S")
+            ));
+        }
+        
+        // 添加Rust后端的初始日志到Python输出之前
+        process_status.output_log.push(format!("[{}] 🔧 初始化分析环境...", 
+            chrono::Utc::now().format("%H:%M:%S")
+        ));
+        let file_name = config.input_file.split(&['/', '\\'][..]).last().unwrap_or(&config.input_file);
+        process_status.output_log.push(format!("[{}] 📁 检查输入文件: {}", 
+            chrono::Utc::now().format("%H:%M:%S"),
+            file_name
+        ));
+        process_status.output_log.push(format!("[{}] 🔧 选择算法: {}", 
+            chrono::Utc::now().format("%H:%M:%S"),
+            match config.algorithm.as_str() {
+                "FIFO" => "FIFO先进先出算法",
+                "BALANCE_METHOD" => "差额计算法",
+                _ => &config.algorithm
+            }
+        ));
+        process_status.output_log.push(format!("[{}] 🐍 准备启动Python分析进程...", 
+            chrono::Utc::now().format("%H:%M:%S")
+        ));
+        
         *process_status = ProcessStatus {
             running: true,
             command: Some(format!("audit_{}", config.algorithm)),
             progress: Some(0.0),
             message: Some("初始化分析环境...".to_string()),
-            output_log: Vec::new(),
+            output_log: process_status.output_log.clone(), // 保留之前的日志
+            process_id: None, // 初始化时还没有进程ID
         };
     }
     
@@ -133,6 +173,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     
     let mut cmd = Command::new(&python_exe);
     cmd.current_dir(&project_root)
+        .arg("-u")  // 无缓冲模式，立即输出
         .arg(script_path)
         .arg("--algorithm")
         .arg(&config.algorithm)
@@ -148,17 +189,24 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     // 步骤4: 开始执行
     {
         let mut process_status = state.current_process.lock().await;
-        process_status.progress = Some(30.0);
+        process_status.progress = Some(5.0);  // 修复：30% → 5%
         process_status.message = Some("启动Python分析进程...".to_string());
     }
     
     let result = match cmd.spawn() {
         Ok(mut child) => {
+            // 保存进程ID到ProcessStatus
+            let child_id = child.id();
+            {
+                let mut process_status = state.current_process.lock().await;
+                process_status.process_id = Some(child_id);
+            }
+            
             let stdout = child.stdout.take().unwrap();
             let reader = BufReader::new(stdout);
             
             let mut output_lines = Vec::new();
-            let mut final_progress = 30.0;
+            let mut final_progress = 5.0;  // 修复：与上面的初始进度保持一致
             
             // 实时读取输出
             for line in reader.lines() {
@@ -169,7 +217,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
                         // 解析进度信息
                         let progress = parse_progress_from_line(&line_str);
                         if progress > final_progress {
-                            final_progress = progress;
+                            final_progress = progress; // parse_progress_from_line已经返回精度控制后的值
                         }
                         
                         // 更新进程状态
@@ -214,7 +262,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
                 
                 AuditResult {
                     success: true,
-                    message: full_output,
+                    message: "分析完成".to_string(),
                     data: None,
                     output_files,
                 }
@@ -230,23 +278,47 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
         }
         Err(e) => {
             error!("Failed to execute audit: {}", e);
-            return Err(format!("执行失败: {}", e));
+            // 不直接return，而是返回错误结果，确保状态重置
+            AuditResult {
+                success: false,
+                message: format!("执行失败: {}", e),
+                data: None,
+                output_files: vec![],
+            }
         }
     };
     
-    // 重置进程状态
+    // 重置进程状态（保留日志） - 无论成功失败都要重置
     {
         let mut process_status = state.current_process.lock().await;
-        *process_status = ProcessStatus {
-            running: false,
-            command: None,
-            progress: None,
-            message: None,
-            output_log: Vec::new(),
+        
+        // 添加分析完成标记
+        let end_message = if result.success {
+            "===== 分析会话结束 ====="
+        } else {
+            "===== 分析会话异常结束 ====="
         };
+        
+        process_status.output_log.push(format!("[{}] {}", 
+            chrono::Utc::now().format("%H:%M:%S"), 
+            end_message
+        ));
+        
+        // 只重置运行状态，保留日志
+        process_status.running = false;  // 关键：确保running状态被重置
+        process_status.command = None;
+        process_status.progress = None;
+        process_status.process_id = None; // 清除进程ID
+        process_status.message = Some(if result.success { "分析完成".to_string() } else { "分析失败".to_string() });
+        // output_log 不清空，保留所有日志
     }
     
-    Ok(result)
+    // 根据结果返回成功或错误
+    if result.success {
+        Ok(result)
+    } else {
+        Err(result.message)
+    }
 }
 
 // Tauri命令：时点查询
@@ -260,6 +332,7 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
     
     let mut cmd = Command::new(&python_exe);
     cmd.current_dir(&project_root)
+        .arg("-u")  // 无缓冲模式，立即输出
         .arg(script_path)
         .arg("--file")
         .arg(&query.file_path)
@@ -360,6 +433,86 @@ async fn clear_query_history(state: State<'_, AppState>) -> Result<(), String> {
     history.clear();
     info!("Query history cleared");
     Ok(())
+}
+
+// Tauri命令：停止当前分析
+#[command]
+async fn stop_analysis(state: State<'_, AppState>) -> Result<bool, String> {
+    let mut process_status = state.current_process.lock().await;
+    
+    if process_status.running {
+        process_status.output_log.push(format!("[{}] ⏹️ 用户停止分析", 
+            chrono::Utc::now().format("%H:%M:%S")
+        ));
+        
+        // 尝试终止Python进程
+        let mut process_killed = false;
+        if let Some(process_id) = process_status.process_id {
+            process_status.output_log.push(format!("[{}] 🔄 正在终止Python进程 (PID: {})...", 
+                chrono::Utc::now().format("%H:%M:%S"), process_id
+            ));
+            
+            // 在Windows上使用taskkill命令终止进程
+            match Command::new("taskkill")
+                .arg("/F")  // 强制终止
+                .arg("/PID") 
+                .arg(process_id.to_string())
+                .output() 
+            {
+                Ok(output) => {
+                    if output.status.success() {
+                        process_killed = true;
+                        process_status.output_log.push(format!("[{}] ✅ Python进程已成功终止", 
+                            chrono::Utc::now().format("%H:%M:%S")
+                        ));
+                    } else {
+                        let error_msg = String::from_utf8_lossy(&output.stderr);
+                        process_status.output_log.push(format!("[{}] ⚠️ 无法终止Python进程: {}", 
+                            chrono::Utc::now().format("%H:%M:%S"), error_msg
+                        ));
+                    }
+                }
+                Err(e) => {
+                    process_status.output_log.push(format!("[{}] ❌ 终止进程时发生错误: {}", 
+                        chrono::Utc::now().format("%H:%M:%S"), e
+                    ));
+                }
+            }
+        }
+        
+        // 重置状态
+        process_status.running = false;
+        process_status.command = None;
+        process_status.progress = Some(0.0);  // 重置进度条
+        process_status.process_id = None;     // 清除进程ID
+        process_status.message = Some(if process_killed { 
+            "分析已停止，进程已终止".to_string() 
+        } else { 
+            "分析已停止".to_string() 
+        });
+        
+        info!("Analysis stopped by user - Process termination: {}", process_killed);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+// Tauri命令：清空分析日志
+#[command]
+async fn clear_analysis_log(state: State<'_, AppState>) -> Result<(), String> {
+    let mut process_status = state.current_process.lock().await;
+    
+    if !process_status.running {
+        process_status.output_log.clear();
+        process_status.output_log.push(format!("[{}] 📝 日志已清空", 
+            chrono::Utc::now().format("%H:%M:%S")
+        ));
+        info!("Analysis log cleared");
+        Ok(())
+    } else {
+        Err("无法在分析进行中清空日志".to_string())
+    }
 }
 
 // Tauri命令：删除历史记录项
@@ -575,60 +728,92 @@ fn create_app_state() -> AppState {
             progress: None,
             message: None,
             output_log: Vec::new(),
+            process_id: None,
         }),
         app_config: Mutex::new(create_default_config()),
     }
 }
 
+// 辅助函数：限制进度值为2位小数
+fn round_progress(progress: f32) -> f32 {
+    // 使用更严格的精度控制方法
+    // 先转换为字符串，再解析回f32以确保精度
+    let formatted = format!("{:.2}", progress);
+    formatted.parse::<f32>().unwrap_or(progress)
+}
+
 // 辅助函数：从输出行解析进度百分比
 fn parse_progress_from_line(line: &str) -> f32 {
-    // 1. 查找百分比模式，如 "进度: 45%" 或 "[45%]"
-    if let Ok(re) = Regex::new(r"(\d+)%") {
+    // 1. 解析新格式的处理进度 "⏳ 处理进度: 1,000/9,799 (10.2%)"
+    if let Ok(re) = Regex::new(r"处理进度:\s*([\d,]+)/([\d,]+)\s*\((\d+\.?\d*)%\)") {
         if let Some(captures) = re.captures(line) {
-            if let Some(percent_str) = captures.get(1) {
+            if let Some(percent_str) = captures.get(3) {
                 if let Ok(percent) = percent_str.as_str().parse::<f32>() {
-                    return percent.min(100.0);
+                    // 先对输入的百分比进行精度控制
+                    let percent_rounded = round_progress(percent);
+                    // 处理阶段占35%-88%，基于实际时间分布(53%)
+                    let progress = 35.0 + (percent_rounded * 0.53);
+                    return round_progress(progress); // 限制为2位小数
                 }
             }
         }
     }
     
-    // 2. 查找"处理进度: X/Y"模式（核心进度信息）
-    if let Ok(re) = Regex::new(r"处理进度:\s*(\d+)/(\d+)") {
+    // 2. 解析简单的处理进度格式 "处理进度: X/Y"
+    if let Ok(re) = Regex::new(r"处理进度:\s*([\d,]+)/([\d,]+)") {
         if let Some(captures) = re.captures(line) {
             if let (Some(current_str), Some(total_str)) = (captures.get(1), captures.get(2)) {
+                // 移除逗号分隔符
+                let current_clean = current_str.as_str().replace(",", "");
+                let total_clean = total_str.as_str().replace(",", "");
+                
                 if let (Ok(current), Ok(total)) = (
-                    current_str.as_str().parse::<f32>(), 
-                    total_str.as_str().parse::<f32>()
+                    current_clean.parse::<f32>(), 
+                    total_clean.parse::<f32>()
                 ) {
                     if total > 0.0 {
-                        // 数据处理阶段占整个分析的60%-90%
                         let data_progress = (current / total) * 100.0;
-                        return 60.0 + (data_progress * 0.3); // 60% + (进度 * 30%)
+                        let data_progress_rounded = round_progress(data_progress);
+                        let progress = 35.0 + (data_progress_rounded * 0.53); // 35% + (进度 * 53%)
+                        return round_progress(progress); // 限制为2位小数
                     }
                 }
             }
         }
     }
     
-    // 3. 检查特定关键词并映射到进度阶段
-    if line.contains("数据预处理") || line.contains("预处理财务数据") {
-        return 40.0;
-    } else if line.contains("流水完整性验证") || line.contains("完整性验证") {
-        return 45.0;
-    } else if line.contains("数据验证") {
-        return 50.0;
-    } else if line.contains("计算初始余额") {
-        return 55.0;
-    } else if line.contains("开始") && (line.contains("FIFO") || line.contains("差额计算")) {
-        return 60.0; // 开始实际的追踪分析
-    } else if line.contains("资金追踪完成") || line.contains("追踪完成") {
+    // 3. 精确匹配特定关键词并映射到进度阶段
+    // 初始化和启动阶段 (0-35%)
+    if line.contains("🚀 启动算法:") && (line.contains("FIFO") || line.contains("BALANCE_METHOD")) {
+        return 5.0;  // 算法启动信息
+    } else if line.contains("📊 开始数据预处理") {
+        return 10.0;
+    } else if line.contains("✅ 数据预处理完成") {
+        return 25.0;  // 数据预处理占20%时间
+    } else if line.contains("🔍 开始流水完整性验证") {
+        return 26.0;
+    } else if line.contains("✅ 流水完整性验证通过") {
+        return 30.0;  // 流水验证占5%时间
+    } else if line.contains("🔎 开始数据验证") {
+        return 31.0;
+    } else if line.contains("✅ 数据验证通过") {
+        return 33.0;  // 数据验证占5%时间
+    } else if line.contains("💰 计算初始余额") {
+        return 34.0;  // 瞬间完成
+    } else if line.contains("🚀 开始") && line.contains("资金追踪分析") {
+        return 35.0; // 开始数据处理阶段
+    } else if line.contains("📋 总共需要处理") && line.contains("条交易记录") {
+        return 35.0; // 开始数据处理
+    // 数据处理完成阶段 (88-100%)  
+    } else if line.contains("✅ 所有") && line.contains("条交易记录处理完成") {
+        return 88.0;  // 数据处理完成，占53%时间
+    } else if line.contains("📈 生成分析结果") {
         return 90.0;
-    } else if line.contains("保存结果") {
+    } else if line.contains("💾 保存分析结果到:") {
         return 95.0;
-    } else if line.contains("生成投资产品交易记录") {
-        return 97.0;
-    } else if line.contains("流水数据处理完成") || line.contains("分析完成") {
+    } else if line.contains("📋 生成投资产品交易记录:") {
+        return 98.0;
+    } else if line.contains("✅") && (line.contains("算法分析完成") || line.contains("FIFO算法分析完成") || line.contains("BALANCE_METHOD算法分析完成")) {
         return 100.0;
     }
     
@@ -638,15 +823,22 @@ fn parse_progress_from_line(line: &str) -> f32 {
 // 辅助函数：从输出行提取显示消息
 fn extract_message_from_line(line: &str) -> String {
     // 移除时间戳和日志级别前缀
-    let cleaned = if let Ok(re) = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - \w+ - ") {
+    let mut cleaned = if let Ok(re) = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - \w+ - ") {
         re.replace(line, "").to_string()
     } else {
         line.to_string()
     };
     
-    // 如果行太长，截断显示
-    if cleaned.len() > 80 {
-        format!("{}...", &cleaned[..77])
+    // 移除Python输出中的百分比，避免与前端显示重复
+    // 匹配格式： "⏳ 处理进度: 2,000/9,799 (20.4%)" -> "⏳ 处理进度: 2,000/9,799"
+    if let Ok(re) = Regex::new(r"\s*\([\d.]+%\)") {
+        cleaned = re.replace_all(&cleaned, "").to_string();
+    }
+    
+    // 如果行太长，截断显示（安全处理UTF-8字符边界）
+    if cleaned.chars().count() > 80 {
+        let truncated: String = cleaned.chars().take(77).collect();
+        format!("{}...", truncated)
     } else {
         cleaned
     }
@@ -671,6 +863,8 @@ fn main() {
             get_query_history,
             clear_query_history,
             delete_query_history_item,
+            stop_analysis,
+            clear_analysis_log,
             get_process_status,
             get_app_config,
             update_app_config,

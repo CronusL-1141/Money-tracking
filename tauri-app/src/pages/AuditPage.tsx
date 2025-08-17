@@ -152,13 +152,7 @@ const AuditPage: React.FC = () => {
     setCurrentStep('初始化分析...');
     
     try {
-      // 添加初始日志
-      const timestamp = new Date().toLocaleString();
-      setAnalysisLog(prev => [...prev, `[${timestamp}] 开始分析...`]);
-      setAnalysisLog(prev => [...prev, `[${timestamp}] 文件: ${inputFile.split(/[/\\]/).pop()}`]);
-      setAnalysisLog(prev => [...prev, `[${timestamp}] 算法: ${algorithm === 'FIFO' ? 'FIFO算法' : '差额计算法'}`]);
-      
-      // 直接调用后端分析（真实实现）
+      // 直接调用后端分析（真实实现），后端会统一管理所有日志
       setCurrentStep('准备分析环境...');
       setProgress(5);
       
@@ -188,7 +182,7 @@ const AuditPage: React.FC = () => {
               setCurrentStep(status.message);
             }
             
-            // 更新Python输出日志
+            // 更新分析日志（后端统一管理）
             if (status.output_log && status.output_log.length > 0) {
               setAnalysisLog(status.output_log);
             }
@@ -252,24 +246,32 @@ const AuditPage: React.FC = () => {
 
   const handleStopAnalysis = async () => {
     try {
+      // 调用后端停止分析
+      const stopped = await invoke<boolean>('stop_analysis');
+      
       // 停止定时器
       if (progressInterval) {
         clearInterval(progressInterval);
         setProgressInterval(null);
       }
       
-      setIsAnalyzing(false);
-      setProgress(0);
-      setCurrentStep('分析已停止');
-      
-      const timestamp = new Date().toLocaleString();
-      setAnalysisLog(prev => [...prev, `[${timestamp}] ⏹️ 用户停止分析`]);
-      
-      showNotification({
-        type: 'info',
-        title: '分析已停止',
-        message: '分析过程已被用户停止',
-      });
+      if (stopped) {
+        setIsAnalyzing(false);
+        setProgress(0);
+        setCurrentStep('分析已停止');
+        
+        showNotification({
+          type: 'info',
+          title: '分析已停止',
+          message: 'UI已停止更新，Python进程可能仍在后台运行',
+        });
+      } else {
+        showNotification({
+          type: 'warning',
+          title: '停止失败',
+          message: '当前没有正在运行的分析任务',
+        });
+      }
     } catch (error) {
       console.error('停止分析失败:', error);
     }
@@ -413,7 +415,7 @@ const AuditPage: React.FC = () => {
               {isAnalyzing ? (
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {currentStep} ({progress}%)
+                    {currentStep} ({progress.toFixed(2)}%)
                   </Typography>
                   <LinearProgress 
                     variant="determinate" 

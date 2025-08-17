@@ -80,6 +80,7 @@ def run_single_analysis(algorithm: str, input_file: str, output_file: Optional[s
         print(f"\n🚀 启动算法: {algorithm}")
         print(f"📝 算法描述: {algo_desc}")
         print(f"📂 输入文件: {input_file}")
+        sys.stdout.flush()  # 强制刷新输出缓冲区
         
         # 创建审计服务
         audit_service = AuditService(algorithm=algorithm)
