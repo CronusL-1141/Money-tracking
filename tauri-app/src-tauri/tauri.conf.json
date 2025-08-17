@@ -39,13 +39,9 @@
         "renameFile": true,
         "exists": true,
         "scope": [
-          "$APPDATA/**",
-          "$LOCALDATA/**",
           "$DOCUMENT/**",
-          "$DOWNLOAD/**",
           "$DESKTOP/**",
           "../data/**",
-          "../src/**",
           "../logs/**"
         ]
       },
@@ -54,16 +50,11 @@
       },
       "process": {
         "all": false,
-        "exit": true,
-        "relaunch": true
+        "exit": true
       },
       "protocol": {
         "all": false,
-        "asset": true,
-        "assetScope": [
-          "$APPDATA/**",
-          "$LOCALDATA/**"
-        ]
+        "asset": true
       },
       "window": {
         "all": false,
@@ -89,25 +80,13 @@
         "icons/icon.ico"
       ],
       "category": "Business",
-      "shortDescription": "专业的FIFO资金追踪审计系统",
-      "longDescription": "基于FIFO算法和差额计算法的双模式资金流向追踪审计分析系统，支持大数据量处理和专业报告生成。",
-      "copyright": "Copyright © 2025 审计团队. All rights reserved.",
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": "",
-        "wix": {
-          "skipWebviewInstall": false
-        }
-      },
+      "shortDescription": "涉案资金追踪分析系统",
+      "windows": {},
       "externalBin": [],
       "resources": []
     },
     "security": {
       "csp": null
-    },
-    "updater": {
-      "active": false
     },
     "windows": [
       {
