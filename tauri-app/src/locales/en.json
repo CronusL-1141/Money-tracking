@@ -49,129 +49,113 @@
     "home": "Home",
     "analysis": "Fund Analysis",
     "query": "Time Point Query",
-    "test": "Function Test",
     "settings": "Settings",
     "help": "Help"
   },
   
+  "home": {
+    "welcome": "Welcome to Fund Tracking Analysis System",
+    "description": "Professional tool for tracking and analyzing fund flows in financial investigations",
+    "getting_started": "Getting Started",
+    "select_algorithm": "Select Analysis Algorithm",
+    "upload_data": "Upload Transaction Data",
+    "start_analysis": "Start Analysis",
+    "recent_analyses": "Recent Analyses",
+    "quick_actions": "Quick Actions",
+    "system_status": "System Status"
+  },
+  
   "analysis": {
-    "title": "Fund Analysis",
-    "algorithm": "Algorithm",
-    "fifo": "FIFO (First In First Out)",
-    "balance_method": "Balance Method",
+    "title": "Fund Flow Analysis",
+    "algorithm": "Analysis Algorithm",
     "input_file": "Input File",
     "output_file": "Output File",
-    "select_file": "Select File",
     "start_analysis": "Start Analysis",
-    "stop_analysis": "Stop Analysis",
-    "analysis_progress": "Analysis Progress",
-    "analysis_results": "Analysis Results",
-    "export_results": "Export Results",
-    "algorithm_description": {
-      "fifo": "Uses First-In-First-Out principle to track fund flows and precisely calculate fund sources for each transaction",
-      "balance_method": "Based on balance priority principle, personal expenses prioritize personal funds, with shortfalls counted as misappropriation"
-    }
+    "progress": "Analysis Progress",
+    "results": "Analysis Results",
+    "download_results": "Download Results",
+    "view_details": "View Details"
+  },
+  
+  "algorithms": {
+    "fifo": "FIFO Method",
+    "fifo_description": "First In First Out tracking method",
+    "balance_method": "Balance Method",
+    "balance_method_description": "Balance-based fund tracking method"
   },
   
   "query": {
     "title": "Time Point Query",
-    "target_row": "Target Row Number",
-    "file_path": "File Path",
-    "query_button": "Execute Query",
-    "query_result": "Query Result",
-    "query_history": "Query History",
-    "save_result": "Save Result",
-    "clear_history": "Clear History",
+    "file_path": "Data File Path",
     "row_number": "Row Number",
-    "timestamp": "Timestamp",
-    "balance_status": "Balance Status",
-    "transaction_info": "Transaction Info",
-    "cumulative_stats": "Cumulative Statistics"
+    "algorithm": "Algorithm",
+    "execute_query": "Execute Query",
+    "query_result": "Query Result",
+    "history": "Query History",
+    "clear_history": "Clear History"
   },
   
   "settings": {
     "title": "Settings",
-    "general": "General Settings",
-    "appearance": "Appearance Settings",
-    "language": "Language Settings",
-    "advanced": "Advanced Settings",
+    "appearance": "Appearance",
     "theme": "Theme",
-    "light_theme": "Light Theme",
-    "dark_theme": "Dark Theme",
-    "auto_theme": "Follow System",
+    "light_theme": "Light",
+    "dark_theme": "Dark",
+    "auto_theme": "Auto",
+    "language": "Language",
     "current_language": "Current Language",
-    "chinese": "中文",
-    "english": "English",
+    "general": "General",
     "auto_save": "Auto Save",
     "notifications": "Notifications",
     "max_history_records": "Max History Records",
     "python_environment": "Python Environment",
+    "environment_status": "Environment Status",
     "check_environment": "Check Environment",
-    "environment_status": "Environment Status"
+    "app_update": "Application Update",
+    "check_update": "Check for Updates",
+    "current_version": "Current Version"
+  },
+  
+  "file": {
+    "select": "Select File",
+    "drag_drop": "Drag and drop file here or click to select",
+    "supported_formats": "Supported formats",
+    "file_info": "File Information",
+    "file_name": "File Name",
+    "file_size": "File Size",
+    "last_modified": "Last Modified"
   },
   
   "results": {
     "summary": "Analysis Summary",
-    "total_rows": "Total Rows",
+    "total_transactions": "Total Transactions",
     "processing_time": "Processing Time",
-    "algorithm_used": "Algorithm Used",
     "final_balance": "Final Balance",
-    "personal_balance": "Personal Balance",
-    "company_balance": "Company Balance",
-    "total_balance": "Total Balance",
+    "personal_funds": "Personal Funds",
+    "company_funds": "Company Funds",
     "misappropriation": "Misappropriation",
-    "cumulative_misappropriation": "Cumulative Misappropriation",
-    "net_misappropriation": "Net Misappropriation",
-    "returned_principal": "Returned Principal",
-    "advance_payment": "Advance Payment",
-    "cumulative_advance": "Cumulative Advance",
-    "profit_distribution": "Profit Distribution",
-    "personal_profit": "Personal Profit",
-    "company_profit": "Company Profit",
-    "output_files": "Output Files"
+    "advances": "Advances"
   },
   
-  "errors": {
-    "system_error": "System Error",
-    "initialization_failed": "System initialization failed",
-    "python_not_available": "Python environment not available, please check if Python is properly installed",
+  "validation": {
+    "required_field": "This field is required",
+    "invalid_format": "Invalid format",
     "file_not_found": "File not found",
-    "file_read_error": "File read error",
-    "analysis_failed": "Analysis failed",
-    "query_failed": "Query failed",
-    "invalid_input": "Invalid input",
-    "permission_denied": "Permission denied",
-    "network_error": "Network error",
-    "unknown_error": "Unknown error"
+    "invalid_file_type": "Invalid file type",
+    "processing_error": "Processing error"
   },
   
   "success": {
-    "analysis_completed": "Analysis completed",
-    "query_completed": "Query completed",
-    "file_saved": "File saved",
-    "settings_saved": "Settings saved",
-    "export_completed": "Export completed",
-    "operation_completed": "Operation completed"
+    "file_uploaded": "File uploaded successfully",
+    "analysis_completed": "Analysis completed successfully",
+    "settings_saved": "Settings saved successfully",
+    "data_exported": "Data exported successfully"
   },
   
-  "warnings": {
-    "unsaved_changes": "There are unsaved changes. Are you sure you want to leave?",
-    "large_file_warning": "Large file detected, processing may take some time",
-    "overwrite_warning": "File exists, overwrite?",
-    "clear_history_warning": "Are you sure you want to clear all history records? This action cannot be undone"
-  },
-  
-  "placeholders": {
-    "select_file": "Please select an Excel file",
-    "enter_row_number": "Please enter row number",
-    "search_placeholder": "Search...",
-    "no_data": "No data available",
-    "no_results": "No query results",
-    "loading_data": "Loading data..."
-  },
-  
-  "file_types": {
-    "excel_files": "Excel Files",
-    "all_files": "All Files"
+  "error": {
+    "file_upload_failed": "File upload failed",
+    "analysis_failed": "Analysis failed",
+    "network_error": "Network error",
+    "unknown_error": "Unknown error occurred"
   }
 }
