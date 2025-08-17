@@ -32,6 +32,8 @@ import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/api/dialog';
 import { listen } from '@tauri-apps/api/event';
 import { useNotification } from '../contexts/NotificationContext';
+import { RustCommands } from '../types/rust-commands';
+import type { TimePointQuery, QueryResult } from '../types/app';
 
 const TimePointQueryPage: React.FC = () => {
   const { t } = useTranslation();
@@ -147,60 +149,128 @@ const TimePointQueryPage: React.FC = () => {
 
   const handleQuery = async () => {
     if (!filePath || !rowNumber) {
+      showNotification({
+        type: 'warning',
+        title: '参数缺失',
+        message: '请选择文件并输入行号',
+      });
+      return;
+    }
+
+    const rowNum = parseInt(rowNumber);
+    if (isNaN(rowNum) || rowNum <= 0) {
+      showNotification({
+        type: 'warning',
+        title: '行号无效',
+        message: '请输入有效的行号（大于0的整数）',
+      });
       return;
     }
 
     setIsQuerying(true);
     try {
-      // TODO: 实现查询逻辑
-      console.log('执行查询', { filePath, rowNumber, algorithm });
+      console.log('执行时点查询', { filePath, rowNumber: rowNum, algorithm });
       
-      // 模拟查询结果
-      const mockResult = {
-        rowNumber: parseInt(rowNumber),
-        timestamp: '2023-01-15 10:30:00',
-        transaction: {
-          income: 0,
-          expense: 5000,
-          balance: 125000,
-          fundAttribute: '个人应付'
-        },
-        balanceStatus: {
-          personal: 50000,
-          company: 75000,
-          total: 125000
-        },
-        cumulativeStats: {
-          misappropriation: 25000,
-          advance: 0,
-          returnedPrincipal: 10000
-        }
+      // 构建查询参数
+      const queryParams: TimePointQuery = {
+        file_path: filePath,
+        row_number: rowNum,
+        algorithm: algorithm,
       };
 
-      setQueryResult(mockResult);
+      // 调用后端真实查询功能
+      const queryResult: QueryResult = await RustCommands.timePointQuery(queryParams);
       
-      // 添加到历史记录
-      const historyItem = {
-        id: Date.now().toString(),
-        timestamp: new Date(),
-        fileName: filePath.split(/[/\\]/).pop(),
-        rowNumber: parseInt(rowNumber),
-        algorithm,
-        result: mockResult
-      };
-      setHistory(prev => [historyItem, ...prev.slice(0, 99)]); // 保持最多100条
+      if (queryResult.success) {
+        setQueryResult({
+          rowNumber: rowNum,
+          timestamp: new Date().toISOString(),
+          rawData: queryResult.data,
+          message: queryResult.message,
+          ...queryResult.data  // 展开后端返回的数据
+        });
+        
+        showNotification({
+          type: 'success',
+          title: '查询成功',
+          message: `第${rowNum}行数据查询完成`,
+        });
+        
+        // 添加到历史记录
+        const historyItem = {
+          id: Date.now().toString(),
+          timestamp: new Date(),
+          fileName: filePath.split(/[/\\]/).pop(),
+          rowNumber: rowNum,
+          algorithm,
+          result: queryResult.data
+        };
+        setHistory(prev => [historyItem, ...prev.slice(0, 99)]); // 保持最多100条
+      } else {
+        // 查询失败
+        setQueryResult(null);
+        showNotification({
+          type: 'error',
+          title: '查询失败',
+          message: queryResult.message || '查询过程中发生错误',
+        });
+      }
       
     } catch (error) {
       console.error('查询失败:', error);
+      setQueryResult(null);
+      showNotification({
+        type: 'error',
+        title: '查询异常',
+        message: `查询执行异常: ${error}`,
+      });
     } finally {
       setIsQuerying(false);
     }
   };
 
-  const handleSaveResult = () => {
-    if (queryResult) {
-      // TODO: 实现保存逻辑
-      console.log('保存结果', queryResult);
+  const handleSaveResult = async () => {
+    if (!queryResult) {
+      return;
+    }
+
+    try {
+      // 构造保存数据
+      const saveData = {
+        query_info: {
+          file_path: filePath,
+          row_number: queryResult.target_row,
+          algorithm: queryResult.algorithm,
+          query_time: queryResult.query_time
+        },
+        result_data: queryResult
+      };
+
+      // 使用浏览器下载功能保存为JSON文件
+      const dataStr = JSON.stringify(saveData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `time_point_query_row_${queryResult.target_row}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showNotification({
+        type: 'success',
+        title: '保存成功',
+        message: '查询结果已保存为JSON文件',
+      });
+    } catch (error) {
+      console.error('保存失败:', error);
+      showNotification({
+        type: 'error',
+        title: '保存失败',
+        message: `保存过程中发生错误: ${error}`,
+      });
     }
   };
 
@@ -345,52 +415,102 @@ const TimePointQueryPage: React.FC = () => {
               {queryResult ? (
                 <Box>
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    查询成功完成
+                    查询成功完成 - 算法: {queryResult.algorithm} | 用时: {queryResult.processing_time?.toFixed(3)}s
                   </Alert>
                   
                   <Typography variant="subtitle2" gutterBottom>
-                    {t('query.transaction_info')}
+                    交易数据 (第{queryResult.target_row}行)
                   </Typography>
                   <TableContainer component={Paper} sx={{ mb: 2 }}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>{t('query.row_number')}</TableCell>
-                          <TableCell>{queryResult.rowNumber}</TableCell>
+                          <TableCell>行号</TableCell>
+                          <TableCell>{queryResult.target_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('query.timestamp')}</TableCell>
-                          <TableCell>{queryResult.timestamp}</TableCell>
+                          <TableCell>时间戳</TableCell>
+                          <TableCell>{queryResult.target_row_data?.timestamp || '--'}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>收入金额</TableCell>
+                          <TableCell>¥{queryResult.target_row_data?.income_amount?.toLocaleString() || '0'}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>支出金额</TableCell>
-                          <TableCell>{queryResult.transaction.expense?.toLocaleString()}</TableCell>
+                          <TableCell>¥{queryResult.target_row_data?.expense_amount?.toLocaleString() || '0'}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>余额</TableCell>
-                          <TableCell>{queryResult.transaction.balance?.toLocaleString()}</TableCell>
+                          <TableCell>¥{queryResult.target_row_data?.balance?.toLocaleString() || '0'}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>资金属性</TableCell>
+                          <TableCell>{queryResult.target_row_data?.fund_attr || '--'}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>资金流向</TableCell>
+                          <TableCell>{queryResult.target_row_data?.flow_type || '--'}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>行为性质</TableCell>
+                          <TableCell>{queryResult.target_row_data?.behavior || '--'}</TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
                   </TableContainer>
 
                   <Typography variant="subtitle2" gutterBottom>
-                    {t('query.balance_status')}
+                    追踪器状态
+                  </Typography>
+                  <TableContainer component={Paper} sx={{ mb: 2 }}>
+                    <Table size="small">
+                      <TableBody>
+                        {queryResult.tracker_state?.personal_balance !== undefined && (
+                          <TableRow>
+                            <TableCell>个人资金余额</TableCell>
+                            <TableCell>¥{queryResult.tracker_state.personal_balance.toLocaleString()}</TableCell>
+                          </TableRow>
+                        )}
+                        {queryResult.tracker_state?.company_balance !== undefined && (
+                          <TableRow>
+                            <TableCell>公司资金余额</TableCell>
+                            <TableCell>¥{queryResult.tracker_state.company_balance.toLocaleString()}</TableCell>
+                          </TableRow>
+                        )}
+                        {queryResult.tracker_state?.total_misappropriation !== undefined && (
+                          <TableRow>
+                            <TableCell>累计挪用</TableCell>
+                            <TableCell>¥{queryResult.tracker_state.total_misappropriation.toLocaleString()}</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+
+                  <Typography variant="subtitle2" gutterBottom>
+                    处理统计
                   </Typography>
                   <TableContainer component={Paper}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>{t('results.personal_balance')}</TableCell>
-                          <TableCell>{queryResult.balanceStatus.personal?.toLocaleString()}</TableCell>
+                          <TableCell>总行数</TableCell>
+                          <TableCell>{queryResult.total_rows}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('results.company_balance')}</TableCell>
-                          <TableCell>{queryResult.balanceStatus.company?.toLocaleString()}</TableCell>
+                          <TableCell>已处理行数</TableCell>
+                          <TableCell>{queryResult.processing_stats?.last_processed_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('results.cumulative_misappropriation')}</TableCell>
-                          <TableCell>{queryResult.cumulativeStats.misappropriation?.toLocaleString()}</TableCell>
+                          <TableCell>处理步骤数</TableCell>
+                          <TableCell>{queryResult.processing_stats?.total_steps}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>错误数量</TableCell>
+                          <TableCell style={{color: queryResult.processing_stats?.error_count > 0 ? '#d32f2f' : '#2e7d32'}}>
+                            {queryResult.processing_stats?.error_count || 0}
+                          </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
