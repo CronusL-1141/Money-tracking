@@ -1,5 +1,7 @@
 # 差额计算法完整逻辑分析与验证
 
+> **💡 提示**: 本文档是差额计算法的详细算法分析。完整项目架构请参考 [../PROJECT_ARCHITECTURE.md](../PROJECT_ARCHITECTURE.md)
+
 ## 📊 核心逻辑理解
 
 ### 1. 差额计算法 vs FIFO的根本区别

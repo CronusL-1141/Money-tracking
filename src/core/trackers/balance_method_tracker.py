@@ -30,9 +30,9 @@ class BalanceMethodTracker(ITracker):
         self._总计个人分配利润 = 0.0
         self._总计公司分配利润 = 0.0
         
-        # 投资产品管理（简化版）
+        # 场外资金池管理（简化版）
         self._投资产品资金池 = {}
-        self._投资产品交易记录 = []
+        self._场外资金池记录 = []
         
         # 复用现有的行为分析器
         self._行为分析器 = BehaviorAnalyzer()
@@ -197,7 +197,7 @@ class BalanceMethodTracker(ITracker):
             公司占比 = 0
         
         # 更新投资产品资金池（记录占比用于赎回）
-        self._更新投资产品资金池(资金属性, 金额, 个人占比, 公司占比)
+        self._更新投资产品资金池(资金属性, 金额, 个人占比, 公司占比, 交易日期)
         
         # 构造行为性质描述
         前缀 = 资金属性.split('-')[0]
@@ -211,7 +211,7 @@ class BalanceMethodTracker(ITracker):
         
         return 个人占比, 公司占比, f"{前缀}申购-{资金属性}：{行为性质}"
     
-    def _更新投资产品资金池(self, 投资产品编号: str, 金额: float, 个人占比: float, 公司占比: float) -> None:
+    def _更新投资产品资金池(self, 投资产品编号: str, 金额: float, 个人占比: float, 公司占比: float, 交易日期: Optional[pd.Timestamp]) -> None:
         """更新投资产品资金池 - 简化版投资产品管理"""
         if 投资产品编号 not in self._投资产品资金池:
             self._投资产品资金池[投资产品编号] = {
@@ -219,7 +219,9 @@ class BalanceMethodTracker(ITracker):
                 '个人占比': 0,
                 '公司占比': 0,
                 '累计申购': 0,
-                '累计赎回': 0
+                '累计赎回': 0,
+                '历史盈利记录': [],  # 记录每次重置时的盈利
+                '累计已实现盈利': 0   # 所有重置盈利的累计
             }
         
         产品信息 = self._投资产品资金池[投资产品编号]
@@ -233,6 +235,7 @@ class BalanceMethodTracker(ITracker):
         
         # 记录交易
         交易记录 = {
+            '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 金额,
             '出金': 0,
@@ -242,7 +245,7 @@ class BalanceMethodTracker(ITracker):
             '累计申购': 产品信息['累计申购'],
             '累计赎回': 产品信息['累计赎回']
         }
-        self._投资产品交易记录.append(交易记录)
+        self._场外资金池记录.append(交易记录)
     
     def 处理投资产品赎回(self, 金额: float, 资金属性: str, 交易日期: Optional[pd.Timestamp]) -> Tuple[float, float, str]:
         """
@@ -299,6 +302,7 @@ class BalanceMethodTracker(ITracker):
         
         # 记录交易
         交易记录 = {
+            '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 0,
             '出金': 金额,
@@ -308,7 +312,7 @@ class BalanceMethodTracker(ITracker):
             '累计申购': 产品信息['累计申购'],
             '累计赎回': 产品信息['累计赎回']
         }
-        self._投资产品交易记录.append(交易记录)
+        self._场外资金池记录.append(交易记录)
         
         前缀 = 投资产品编号.split('-')[0]
         return 个人占比, 公司占比, f"{前缀}赎回-{投资产品编号}：个人{个人返还:,.2f}，公司{公司返还:,.2f}"
@@ -337,20 +341,109 @@ class BalanceMethodTracker(ITracker):
             return 0, 0
         return self._个人余额 / total_balance, self._公司余额 / total_balance
     
-    def 生成投资产品交易记录Excel(self, 文件名: str = "投资产品交易记录.xlsx") -> None:
-        """生成投资产品交易记录Excel"""
-        if not self._投资产品交易记录:
-            audit_logger.info("没有投资产品交易记录，跳过Excel生成")
+    def 生成场外资金池记录Excel(self, 文件名: str = "场外资金池记录.xlsx") -> None:
+        """生成场外资金池记录Excel"""
+        if not self._场外资金池记录:
+            audit_logger.info("没有场外资金池记录，跳过Excel生成")
             return
         
         try:
             import pandas as pd
-            df = pd.DataFrame(self._投资产品交易记录)
-            df.to_excel(文件名, index=False, engine='openpyxl')
-            audit_logger.info(f"✅ 投资产品交易记录已保存至: {文件名}")
-            audit_logger.info(f"📊 共记录 {len(self._投资产品交易记录)} 笔投资产品交易")
+            # 创建DataFrame
+            df = pd.DataFrame(self._场外资金池记录)
+            
+            # 按资金池名称分组，每组内按时间排序
+            if len(df) > 0:
+                df['交易时间_排序'] = pd.to_datetime(df['交易时间'], errors='coerce')
+                # 先按资金池名称排序，再按时间排序
+                df = df.sort_values(['资金池名称', '交易时间_排序'])
+                
+                # 为每个资金池添加总计行
+                processed_data = []
+                for pool_name in df['资金池名称'].unique():
+                    pool_data = df[df['资金池名称'] == pool_name].copy()
+                    processed_data.append(pool_data)
+                    
+                    # 创建总计行
+                    if len(pool_data) > 0:
+                        last_row = pool_data.iloc[-1]
+                        total_purchase = pool_data['入金'].sum()
+                        total_redemption = pool_data['出金'].sum()
+                        
+                        # 计算最终盈亏状态
+                        final_total_balance = last_row['总余额']
+                        
+                        # 从资金占比字符串中提取个人和公司比例
+                        ratio_str = last_row['资金占比']
+                        final_personal_balance = final_total_balance * 0.5  # 默认值，如果解析失败
+                        final_company_balance = final_total_balance * 0.5
+                        
+                        # 计算真实盈亏（考虑资金池重置历史）
+                        if pool_name in self._投资产品资金池:
+                            pool_info = self._投资产品资金池[pool_name]
+                            historical_profit = pool_info.get('累计已实现盈利', 0)
+                            
+                            # 当前周期盈亏
+                            if final_total_balance < 0:
+                                current_profit = abs(final_total_balance)
+                                current_status = "盈利"
+                            elif final_total_balance > 0:
+                                current_profit = -final_total_balance  # 负数表示亏损
+                                current_status = "亏损"
+                            else:
+                                current_profit = 0
+                                current_status = "持平"
+                            
+                            # 真实总盈亏
+                            total_real_profit = historical_profit + current_profit
+                            
+                            if total_real_profit > 0:
+                                profit_status = "盈利"
+                            elif total_real_profit < 0:
+                                profit_status = "亏损"
+                            else:
+                                profit_status = "持平"
+                            
+                            profit_loss = total_real_profit
+                        else:
+                            # fallback to old logic
+                            net_amount = total_purchase - total_redemption
+                            profit_loss = final_total_balance - net_amount if net_amount != 0 else 0
+                            profit_status = "盈利" if profit_loss > 0 else "亏损" if profit_loss < 0 else "持平"
+                        
+                        summary_row = pd.Series({
+                            '交易时间': '── 总计 ──',
+                            '资金池名称': f'{pool_name} 汇总',
+                            '入金': f'总申购: ¥{total_purchase:,.0f}',
+                            '出金': f'总赎回: ¥{total_redemption:,.0f}',
+                            '总余额': f'最终余额: ¥{final_total_balance:,.0f}',
+                            '资金占比': f'净盈亏: ¥{profit_loss:,.0f}',
+                            '行为性质': f'状态: {profit_status}',
+                            '累计申购': total_purchase,
+                            '累计赎回': total_redemption,
+                            '交易时间_排序': pd.NaT
+                        })
+                        
+                        processed_data.append(pd.DataFrame([summary_row]))
+                        
+                        # 在每个总计行后面都添加空白行分隔
+                        empty_row = pd.Series({col: '' for col in df.columns})
+                        empty_row['交易时间_排序'] = pd.NaT
+                        processed_data.append(pd.DataFrame([empty_row]))
+                
+                # 合并所有数据
+                final_df = pd.concat(processed_data, ignore_index=True)
+                # 删除临时排序列
+                final_df = final_df.drop('交易时间_排序', axis=1)
+            else:
+                final_df = df
+            
+            # 保存到Excel
+            final_df.to_excel(文件名, index=False, engine='openpyxl')
+            audit_logger.info(f"✅ 场外资金池记录已保存至: {文件名}")
+            audit_logger.info(f"📊 共记录 {len(self._场外资金池记录)} 笔资金池交易，按资金池分组排序")
         except Exception as e:
-            audit_logger.error(f"❌ 生成投资产品交易记录Excel失败: {e}")
+            audit_logger.error(f"❌ 生成场外资金池记录Excel失败: {e}")
     
     # 属性访问
     @property

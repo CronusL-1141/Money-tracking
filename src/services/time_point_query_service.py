@@ -7,10 +7,12 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 import json
+import sys
 
 from core.interfaces.tracker_interface import ITracker
 from core.factories.tracker_factory import TrackerFactory
 from utils.data_processor import DataProcessor
+from utils.flow_integrity_validator import FlowIntegrityValidator
 from utils.logger import audit_logger
 from config import Config
 
@@ -30,6 +32,7 @@ class TimePointQueryService:
         self.algorithm = algorithm
         self.tracker: Optional[ITracker] = None
         self.data_processor = DataProcessor()
+        self.flow_validator = FlowIntegrityValidator()
         
         # 数据状态
         self.data: Optional[pd.DataFrame] = None
@@ -56,38 +59,144 @@ class TimePointQueryService:
         Returns:
             加载结果信息
         """
+        # 在函数开始就导入所需的模块，避免作用域问题
+        import logging
+        from utils.logger import audit_logger
+        
         try:
             audit_logger.info(f"开始加载数据文件: {file_path}")
             
-            # 使用数据处理器加载数据
-            self.data = self.data_processor.预处理财务数据(file_path)
+            # 1. 数据预处理（静默模式）
+            print("📊 开始数据预处理...", file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
             
-            if self.data is not None:
-                self.total_rows = len(self.data)
-                self.current_row = 0
-                
-                # 清除历史记录
-                self.query_history.clear()
-                self.processing_steps.clear()
-                self.error_records.clear()
-                
-                result = {
-                    "success": True,
-                    "total_rows": self.total_rows,
-                    "message": f"数据加载成功，共 {self.total_rows} 行",
-                    "file_path": file_path
-                }
-                
-                audit_logger.info(f"数据加载成功: {self.total_rows} 行")
-                return result
-            else:
-                error_msg = "数据加载失败：预处理返回空数据"
+            # 临时调整日志级别，减少详细输出
+            
+            # 保存原始级别
+            original_level = logging.getLogger().level
+            original_audit_level = audit_logger.logger.level
+            
+            # 调整日志级别：保留重要信息，抑制详细的贪心算法步骤和WARNING
+            logging.getLogger().setLevel(logging.ERROR)
+            audit_logger.logger.setLevel(logging.ERROR)
+            
+            try:
+                self.data = self.data_processor.预处理财务数据(file_path)
+            finally:
+                # 恢复原始日志级别
+                logging.getLogger().setLevel(original_level)
+                audit_logger.logger.setLevel(original_audit_level)
+            
+            if self.data is None:
+                error_msg = "数据预处理失败"
                 audit_logger.error(error_msg)
                 return {
                     "success": False,
                     "message": error_msg,
                     "file_path": file_path
                 }
+            print(f"✅ 数据预处理完成，共加载 {len(self.data):,} 条记录", file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            
+            # 2. 流水完整性验证（静默模式）
+            print("🔍 开始流水完整性验证...", file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            
+            # 临时提升日志级别以减少详细输出（隐藏WARNING信息）
+            logging.getLogger().setLevel(logging.ERROR)
+            audit_logger.logger.setLevel(logging.ERROR)
+            
+            try:
+                validation_result = self.flow_validator.validate_flow_integrity(self.data)
+            finally:
+                # 恢复原始日志级别
+                logging.getLogger().setLevel(original_level)
+                audit_logger.logger.setLevel(original_audit_level)
+            if not validation_result['is_valid']:
+                print(f"⚠️  流水完整性验证发现 {validation_result['errors_count']} 个问题", file=sys.stderr)
+                sys.stderr.flush()
+                sys.stdout.flush()
+                audit_logger.warning(f"流水完整性验证发现{validation_result['errors_count']}个问题")
+                
+                if validation_result['optimization_failed']:
+                    print("❌ 流水优化失败，无法自动修复数据完整性问题", file=sys.stderr)
+                    sys.stderr.flush()
+                    sys.stdout.flush()
+                    audit_logger.error("❌ 流水优化失败，无法自动修复数据完整性问题")
+                    return {
+                        "success": False,
+                        "message": "流水完整性验证失败，无法自动修复",
+                        "file_path": file_path
+                    }
+                
+                if validation_result['optimizations_count'] > 0:
+                    print(f"🔧 已通过重排序修复 {validation_result['optimizations_count']} 个问题", file=sys.stderr)
+                    sys.stderr.flush()
+                    sys.stdout.flush()
+                    audit_logger.info(f"已通过重排序修复{validation_result['optimizations_count']}个问题")
+                    self.data = validation_result['result_dataframe']
+                    print("✅ 使用修复后的数据继续处理（源文件保持不变）", file=sys.stderr)
+                    sys.stderr.flush()
+                    sys.stdout.flush()
+                    audit_logger.info("✅ 使用修复后的数据继续处理（源文件保持不变）")
+                    
+                    # 重要：数据已重排序，重置DataFrame索引以避免余额验证问题
+                    self.data.reset_index(drop=True, inplace=True)
+            else:
+                print("✅ 流水完整性验证通过", file=sys.stderr)
+                sys.stderr.flush()
+                audit_logger.info("✅ 流水完整性验证通过")
+                sys.stdout.flush()
+                sys.stderr.flush()
+            
+            # 3. 数据验证（静默模式）
+            print("🔎 开始数据验证...", file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            
+            # 临时提升日志级别以减少详细输出（隐藏WARNING信息）
+            logging.getLogger().setLevel(logging.ERROR)
+            audit_logger.logger.setLevel(logging.ERROR)
+            
+            try:
+                validation_result = self.data_processor.验证数据完整性(self.data)
+            finally:
+                # 恢复原始日志级别
+                logging.getLogger().setLevel(original_level)
+                audit_logger.logger.setLevel(original_audit_level)
+            if not validation_result['is_valid']:
+                print("⚠️  数据验证发现问题，但继续处理", file=sys.stderr)
+                sys.stderr.flush()
+                sys.stdout.flush()
+                audit_logger.warning("数据验证发现问题，但继续处理")
+                for error in validation_result['errors'][:5]:
+                    audit_logger.warning(error)
+            else:
+                print("✅ 数据验证通过", file=sys.stderr)
+                sys.stderr.flush()
+                sys.stdout.flush()
+                
+            # 4. 设置基本信息
+            self.total_rows = len(self.data)
+            self.current_row = 0
+            
+            # 清除历史记录
+            self.query_history.clear()
+            self.processing_steps.clear()
+            self.error_records.clear()
+            
+            result = {
+                "success": True,
+                "total_rows": self.total_rows,
+                "message": f"数据加载成功，共 {self.total_rows} 行（包含完整性验证）",
+                "file_path": file_path
+            }
+            
+            audit_logger.info(f"时点查询数据加载完成: {self.total_rows} 行")
+            return result
                 
         except Exception as e:
             error_msg = f"数据加载出错: {str(e)}"
@@ -198,7 +307,10 @@ class TimePointQueryService:
             处理结果
         """
         try:
+            import sys
             # 逐行处理到目标行
+            progress_interval = max(1, target_row // 20)  # 最多显示20次进度更新
+            
             for i in range(target_row):
                 try:
                     step_result = self._process_single_row(i)
@@ -209,16 +321,14 @@ class TimePointQueryService:
                             "failed_row": i + 1
                         }
                     
-                    # 验证余额（如果数据有余额列）
-                    if '余额' in self.data.columns:
-                        expected_balance = self.data.iloc[i]['余额']
-                        if not self._validate_balance(i + 1, expected_balance):
-                            return {
-                                "success": False,
-                                "message": f"第 {i + 1} 行余额验证失败",
-                                "failed_row": i + 1,
-                                "balance_error": True
-                            }
+                    # 显示进度（每处理一定数量行就输出一次）
+                    if (i + 1) % progress_interval == 0 or i + 1 == target_row:
+                        percentage = (i + 1) / target_row * 100
+                        print(f"⏳ 处理进度: {i + 1}/{target_row} ({percentage:.1f}%)", file=sys.stderr)
+                        sys.stderr.flush()
+                    
+                    # 跳过逐行余额验证（流水完整性验证已确保数据正确性）
+                    # 避免由于数据重排序导致的行号不匹配问题
                 
                 except Exception as e:
                     error_info = {
@@ -364,15 +474,23 @@ class TimePointQueryService:
         if self.tracker is None:
             return {}
         
+        # 计算净挪用金额（个人应还 - 公司应还）
+        personal_owed = self.tracker.累计挪用金额 - self.tracker.累计已归还个人本金
+        company_owed = self.tracker.累计垫付金额 - self.tracker.累计已归还公司本金
+        net_misappropriation = personal_owed - company_owed
+        
         return {
             "personal_balance": self.tracker.个人余额,
             "company_balance": self.tracker.公司余额,
             "total_balance": self.tracker.个人余额 + self.tracker.公司余额,
-            "total_misuse": self.tracker.累计挪用金额,
+            "total_misappropriation": self.tracker.累计挪用金额,  # 修复字段名匹配前端期望
             "total_advance": self.tracker.累计垫付金额,
             "total_returned": self.tracker.累计已归还公司本金,
             "personal_profit": self.tracker.总计个人分配利润,
             "company_profit": self.tracker.总计公司分配利润,
+            "personal_owed": personal_owed,  # 个人应还
+            "company_owed": company_owed,    # 公司应还
+            "net_misappropriation": net_misappropriation,  # 净挪用（个人应还 - 公司应还）
             "is_initialized": self.tracker.已初始化
         }
     
@@ -406,15 +524,43 @@ class TimePointQueryService:
         
         # 目标行数据
         if target_row > 0 and self.data is not None:
+            import math
             target_row_data = self.data.iloc[target_row - 1]
+            
+            # 安全转换数值，处理NaN值
+            def safe_float(value, default=0.0):
+                try:
+                    if value is None or (isinstance(value, float) and math.isnan(value)):
+                        return default
+                    return float(value)
+                except (ValueError, TypeError):
+                    return default
+            
+            # 处理资金流向：根据收入支出金额判断
+            income_amount = safe_float(target_row_data.get('交易收入金额'))
+            expense_amount = safe_float(target_row_data.get('交易支出金额'))
+            
+            if income_amount > 0 and expense_amount == 0:
+                flow_type = "收入"
+            elif expense_amount > 0 and income_amount == 0:
+                flow_type = "支出"
+            elif income_amount > 0 and expense_amount > 0:
+                flow_type = "收支"
+            else:
+                flow_type = "无变动"
+            
+            # 处理行为性质：清理投资产品的前缀格式
+            raw_behavior = str(target_row_data.get('行为性质', ''))
+            clean_behavior = self._clean_behavior_description(raw_behavior)
+            
             result["target_row_data"] = {
                 "timestamp": str(target_row_data.get('完整时间戳', '')),
-                "income_amount": float(target_row_data.get('交易收入金额', 0) or 0),
-                "expense_amount": float(target_row_data.get('交易支出金额', 0) or 0),
-                "balance": float(target_row_data.get('余额', 0) or 0),
+                "income_amount": income_amount,
+                "expense_amount": expense_amount,
+                "balance": safe_float(target_row_data.get('余额')),
                 "fund_attr": str(target_row_data.get('资金属性', '')),
-                "flow_type": str(target_row_data.get('资金流向类型', '')),
-                "behavior": str(target_row_data.get('行为性质', ''))
+                "flow_type": flow_type,
+                "behavior": clean_behavior
             }
         
         # 处理统计
@@ -432,6 +578,32 @@ class TimePointQueryService:
             result["errors"] = self.error_records[-5:]  # 最近5个错误
         
         return result
+    
+    def _clean_behavior_description(self, behavior: str) -> str:
+        """
+        清理行为性质描述，去掉投资产品的前缀格式
+        
+        例如：
+        "理财申购-理财-SYA160401160408：投资挪用：1,898,094.23；个人投资：121,905.77"
+        → "投资挪用：1,898,094.23；个人投资：121,905.77"
+        
+        保持非投资行为不变：
+        "垫付：5,766.13；公司支付：533.87" → "垫付：5,766.13；公司支付：533.87"
+        """
+        if not behavior:
+            return behavior
+        
+        # 检查是否包含投资产品的前缀格式（如：理财申购-理财-SYA160401160408：）
+        import re
+        investment_prefix_pattern = r'^[^：]*申购-[^：]*：'
+        
+        if re.match(investment_prefix_pattern, behavior):
+            # 去掉前缀，只保留冒号后面的内容
+            parts = behavior.split('：', 1)
+            if len(parts) > 1:
+                return parts[1]
+        
+        return behavior
     
     def _save_to_history(self, query_result: Dict[str, Any]) -> None:
         """

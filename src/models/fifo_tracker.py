@@ -63,8 +63,8 @@ class FIFO资金追踪器:
         self._上次行为分析器挪用金额 = 0.0
         self._上次行为分析器垫付金额 = 0.0
         
-        # 投资产品交易记录
-        self.投资产品交易记录 = []
+        # 场外资金池记录
+        self.场外资金池记录 = []
         
         audit_logger.debug("FIFO资金追踪器初始化完成")
     
@@ -193,7 +193,7 @@ class FIFO资金追踪器:
             个人占比, 公司占比, 行为性质 = self._处理投资资金流出(金额, 资金属性, 交易日期)
             
             # 更新投资产品资金池
-            self._更新投资产品资金池(资金属性, 金额, 个人占比, 公司占比)
+            self._更新投资产品资金池(资金属性, 金额, 个人占比, 公司占比, 交易日期)
             
             前缀 = 资金属性.split('-')[0]
             return 个人占比, 公司占比, f"{前缀}申购-{资金属性}：{行为性质}"
@@ -367,7 +367,7 @@ class FIFO资金追踪器:
         
         return 个人占比, 公司占比, 行为性质
     
-    def _更新投资产品资金池(self, 投资产品编号: str, 金额: float, 个人占比: float, 公司占比: float) -> None:
+    def _更新投资产品资金池(self, 投资产品编号: str, 金额: float, 个人占比: float, 公司占比: float, 交易日期: Optional[pd.Timestamp]) -> None:
         """更新投资产品资金池"""
         个人金额 = 金额 * 个人占比
         公司金额 = 金额 * 公司占比
@@ -381,7 +381,9 @@ class FIFO资金追踪器:
                 '累计申购': 0,
                 '累计赎回': 0,
                 '最新个人占比': 0,
-                '最新公司占比': 0
+                '最新公司占比': 0,
+                '历史盈利记录': [],  # 记录每次重置时的盈利
+                '累计已实现盈利': 0   # 所有重置盈利的累计
             }
         
         # 检查当前资金池状态
@@ -389,7 +391,20 @@ class FIFO资金追踪器:
         
         if 当前总金额 < 0:
             # 资金池为负数，说明之前有收益，再次申购时重置资金池
-            # audit_logger.info(f"投资产品{投资产品编号}资金池为负数({当前总金额:,.2f})，重置为新申购")
+            realized_profit = abs(当前总金额)  # 已实现盈利
+            
+            # 记录这次重置的盈利
+            reset_record = {
+                'reset_time': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 else '未知时间',
+                'profit_amount': realized_profit,
+                'description': f'重置前实现盈利 ¥{realized_profit:,.2f}'
+            }
+            self.投资产品资金池[投资产品编号]['历史盈利记录'].append(reset_record)
+            self.投资产品资金池[投资产品编号]['累计已实现盈利'] += realized_profit
+            
+            # audit_logger.info(f"投资产品{投资产品编号}资金池重置，实现盈利{realized_profit:,.2f}")
+            
+            # 重置资金池
             self.投资产品资金池[投资产品编号]['个人金额'] = 个人金额
             self.投资产品资金池[投资产品编号]['公司金额'] = 公司金额
             self.投资产品资金池[投资产品编号]['总金额'] = 金额
@@ -424,6 +439,7 @@ class FIFO资金追踪器:
             资金占比 = "无资金"
         
         交易记录 = {
+            '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 金额,
             '出金': 0,
@@ -435,7 +451,7 @@ class FIFO资金追踪器:
             '累计申购': 产品信息['累计申购'],
             '累计赎回': 产品信息['累计赎回']
         }
-        self.投资产品交易记录.append(交易记录)
+        self.场外资金池记录.append(交易记录)
     
     def 处理投资产品赎回(self, 金额: float, 资金属性: str, 交易日期: Optional[pd.Timestamp]) -> Tuple[float, float, str]:
         """
@@ -575,6 +591,7 @@ class FIFO资金追踪器:
             资金占比 = "资金池清空"
         
         交易记录 = {
+            '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 0,
             '出金': 金额,
@@ -586,7 +603,7 @@ class FIFO资金追踪器:
             '累计申购': 更新后产品信息['累计申购'],
             '累计赎回': 更新后产品信息['累计赎回']
         }
-        self.投资产品交易记录.append(交易记录)
+        self.场外资金池记录.append(交易记录)
         
         return 最新个人占比, 最新公司占比, 行为性质
     
@@ -623,32 +640,117 @@ class FIFO资金追踪器:
             '已初始化': self.已初始化
         } 
     
-    def 生成投资产品交易记录Excel(self, 文件名: str = "投资产品交易记录.xlsx") -> None:
+    def 生成场外资金池记录Excel(self, 文件名: str = "场外资金池记录.xlsx") -> None:
         """
-        生成投资产品交易记录的Excel文件
+        生成场外资金池记录的Excel文件
         
         Args:
             文件名: 保存的Excel文件名
         """
-        if not self.投资产品交易记录:
-            audit_logger.info("没有投资产品交易记录，跳过Excel生成")
+        if not self.场外资金池记录:
+            audit_logger.info("没有场外资金池记录，跳过Excel生成")
             return
         
         try:
             # 创建DataFrame
-            df = pd.DataFrame(self.投资产品交易记录)
+            df = pd.DataFrame(self.场外资金池记录)
+            
+            # 按资金池名称分组，每组内按时间排序
+            if len(df) > 0:
+                df['交易时间_排序'] = pd.to_datetime(df['交易时间'], errors='coerce')
+                # 先按资金池名称排序，再按时间排序
+                df = df.sort_values(['资金池名称', '交易时间_排序'])
+                
+                # 为每个资金池添加总计行
+                processed_data = []
+                for pool_name in df['资金池名称'].unique():
+                    pool_data = df[df['资金池名称'] == pool_name].copy()
+                    processed_data.append(pool_data)
+                    
+                    # 创建总计行
+                    if len(pool_data) > 0:
+                        last_row = pool_data.iloc[-1]
+                        total_purchase = pool_data['入金'].sum()
+                        total_redemption = pool_data['出金'].sum()
+                        
+                        # 计算最终盈亏状态
+                        final_personal_balance = last_row['个人余额']
+                        final_company_balance = last_row['公司余额']
+                        final_total_balance = last_row['总余额']
+                        
+                        # 计算真实盈亏（考虑资金池重置历史）
+                        if pool_name in self.投资产品资金池:
+                            pool_info = self.投资产品资金池[pool_name]
+                            historical_profit = pool_info.get('累计已实现盈利', 0)
+                            
+                            # 当前周期盈亏
+                            if final_total_balance < 0:
+                                current_profit = abs(final_total_balance)
+                                current_status = "盈利"
+                            elif final_total_balance > 0:
+                                current_profit = -final_total_balance  # 负数表示亏损
+                                current_status = "亏损"
+                            else:
+                                current_profit = 0
+                                current_status = "持平"
+                            
+                            # 真实总盈亏
+                            total_real_profit = historical_profit + current_profit
+                            
+                            if total_real_profit > 0:
+                                profit_status = "盈利"
+                            elif total_real_profit < 0:
+                                profit_status = "亏损"
+                            else:
+                                profit_status = "持平"
+                            
+                            profit_loss = total_real_profit
+                        else:
+                            # fallback to old logic
+                            net_amount = total_purchase - total_redemption
+                            profit_loss = final_total_balance - net_amount if net_amount != 0 else 0
+                            profit_status = "盈利" if profit_loss > 0 else "亏损" if profit_loss < 0 else "持平"
+                        
+                        summary_row = pd.Series({
+                            '交易时间': '── 总计 ──',
+                            '资金池名称': f'{pool_name} 汇总',
+                            '入金': f'总申购: ¥{total_purchase:,.0f}',
+                            '出金': f'总赎回: ¥{total_redemption:,.0f}',
+                            '总余额': f'最终余额: ¥{final_total_balance:,.0f}',
+                            '个人余额': f'个人{profit_status}: ¥{final_personal_balance:,.0f}',
+                            '公司余额': f'公司{profit_status}: ¥{final_company_balance:,.0f}',
+                            '资金占比': f'净盈亏: ¥{profit_loss:,.0f}',
+                            '行为性质': f'状态: {profit_status}',
+                            '累计申购': total_purchase,
+                            '累计赎回': total_redemption,
+                            '交易时间_排序': pd.NaT
+                        })
+                        
+                        processed_data.append(pd.DataFrame([summary_row]))
+                        
+                        # 在每个总计行后面都添加空白行分隔
+                        empty_row = pd.Series({col: '' for col in df.columns})
+                        empty_row['交易时间_排序'] = pd.NaT
+                        processed_data.append(pd.DataFrame([empty_row]))
+                
+                # 合并所有数据
+                final_df = pd.concat(processed_data, ignore_index=True)
+                # 删除临时排序列
+                final_df = final_df.drop('交易时间_排序', axis=1)
+            else:
+                final_df = df
             
             # 保存到Excel
-            df.to_excel(文件名, index=False, engine='openpyxl')
-            audit_logger.info(f"✅ 投资产品交易记录已保存至: {文件名}")
-            audit_logger.info(f"📊 共记录 {len(self.投资产品交易记录)} 笔投资产品交易")
+            final_df.to_excel(文件名, index=False, engine='openpyxl')
+            audit_logger.info(f"✅ 场外资金池记录已保存至: {文件名}")
+            audit_logger.info(f"📊 共记录 {len(self.场外资金池记录)} 笔资金池交易，按资金池分组排序")
             
         except Exception as e:
-            audit_logger.error(f"❌ 生成投资产品交易记录Excel失败: {e}")
+            audit_logger.error(f"❌ 生成场外资金池记录Excel失败: {e}")
             # 如果Excel被占用，尝试保存为备用文件名
             try:
                 备用文件名 = 文件名.replace('.xlsx', '_备份.xlsx')
                 df.to_excel(备用文件名, index=False, engine='openpyxl')
-                audit_logger.info(f"✅ 投资产品交易记录已保存至备用文件: {备用文件名}")
+                audit_logger.info(f"✅ 场外资金池记录已保存至备用文件: {备用文件名}")
             except Exception as e2:
                 audit_logger.error(f"❌ 保存备用文件也失败: {e2}") 
