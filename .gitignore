@@ -33,6 +33,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Rust构建产物
+rust-backend/target/
+rust-backend/Cargo.lock
+
 # Tauri构建产物
 tauri-app/src-tauri/target/
 tauri-app/dist/
@@ -60,9 +64,17 @@ tmp/
 cache/
 
 # 输出的分析结果文件（用户生成的）
-*_资金追踪结果.xlsx
+# 保留基准测试需要的完整算法结果文件
+!FIFO_资金追踪结果.xlsx
+!BALANCE_METHOD_资金追踪结果.xlsx
+!场外资金池记录_FIFO.xlsx
+!场外资金池记录_BALANCE_METHOD.xlsx
+
+# 排除临时生成的结果文件
+temp_*_资金追踪结果.xlsx
+test_*_资金追踪结果.xlsx
+debug_*_资金追踪结果.xlsx
 *_交易记录.xlsx
-投资产品交易记录_*.xlsx
 
 # 个人配置和敏感信息
 .env

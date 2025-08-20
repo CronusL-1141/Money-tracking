@@ -43,9 +43,9 @@ pub mod utils;
 pub mod optimizations;
 
 // 重新导出主要类型供外部使用
-pub use algorithms::{AlgorithmType, TrackerEngine, FifoTracker, BalanceMethodTracker};
+pub use algorithms::{AlgorithmType, TrackerEngine};
 pub use data_structures::{Transaction, FundPool, ProcessResult};
-pub use services::{AuditService, TimePointQueryService, AuditResult};
+// pub use services::{AuditService, TimePointQueryService, AuditResult}; // TODO: 暂时注释
 pub use utils::{Config, AuditError};
 
 /// 库版本信息

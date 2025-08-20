@@ -73,6 +73,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # 异步trait
 async-trait = "0.1"
 
+# 系统信息
+num_cpus = "1.16"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.8"

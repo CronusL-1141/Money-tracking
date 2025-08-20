@@ -19,18 +19,19 @@
 //! - [`FundPoolQueryService`]: 资金池查询服务，提供资金池详细信息
 //! - [`DataProcessor`]: 数据处理服务，处理Excel读写和数据验证
 
-pub mod audit;
-pub mod time_point;
-pub mod fund_pool;
-pub mod data_processing;
-pub mod realtime;
+// TODO: 暂时注释掉子模块，等实现时再启用
+// pub mod audit;
+// pub mod time_point;
+// pub mod fund_pool;
+// pub mod data_processing;
+// pub mod realtime;
 
-// 重新导出主要类型
-pub use audit::{AuditService, AuditConfig, AuditResult};
-pub use time_point::{TimePointQueryService, TimePointQuery, QueryResult};
-pub use fund_pool::{FundPoolQueryService, FundPoolQueryResult};
-pub use data_processing::{DataProcessor, ExcelProcessor};
-pub use realtime::{RealtimeReporter, ProgressMessage, ProgressLevel};
+// // 重新导出主要类型
+// pub use audit::{AuditService, AuditConfig, AuditResult};
+// pub use time_point::{TimePointQueryService, TimePointQuery, QueryResult};
+// pub use fund_pool::{FundPoolQueryService, FundPoolQueryResult};
+// pub use data_processing::{DataProcessor, ExcelProcessor};
+// pub use realtime::{RealtimeReporter, ProgressMessage, ProgressLevel};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

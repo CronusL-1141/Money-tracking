@@ -17,16 +17,17 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-pub mod fifo;
-pub mod balance_method;
-pub mod behavior_analyzer;
-pub mod factory;
+// TODO: 暂时注释掉子模块，等实现时再启用
+// pub mod fifo;
+// pub mod balance_method; 
+// pub mod behavior_analyzer;
+// pub mod factory;
 
-// 重新导出主要类型
-pub use fifo::FifoTracker;
-pub use balance_method::BalanceMethodTracker;
-pub use behavior_analyzer::BehaviorAnalyzer;
-pub use factory::TrackerFactory;
+// // 重新导出主要类型
+// pub use fifo::FifoTracker;
+// pub use balance_method::BalanceMethodTracker;
+// pub use behavior_analyzer::BehaviorAnalyzer;
+// pub use factory::TrackerFactory;
 
 /// 算法类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

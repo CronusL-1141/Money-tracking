@@ -10,19 +10,20 @@
 //! - **缓存优化**: 智能缓存热点数据
 //! - **数据局部性**: 优化数据访问模式
 
-pub mod simd;
-pub mod memory_pool;
-pub mod parallel;
-pub mod cache;
+// TODO: 暂时注释掉子模块，等实现时再启用
+// pub mod simd;
+// pub mod memory_pool;
+// pub mod parallel;
+// pub mod cache;
 
-// 重新导出主要类型
-pub use simd::SimdCalculator;
-pub use memory_pool::{MemoryPool, PooledObject};
-pub use parallel::ParallelProcessor;
-pub use cache::{LruCache, CacheManager};
+// // 重新导出主要类型
+// pub use simd::SimdCalculator;
+// pub use memory_pool::{MemoryPool, PooledObject};
+// pub use parallel::ParallelProcessor;
+// pub use cache::{LruCache, CacheManager};
 
-use std::sync::Arc;
-use parking_lot::Mutex;
+// use std::sync::Arc;
+// use parking_lot::Mutex;
 
 /// 性能统计信息
 #[derive(Debug, Clone, Default)]

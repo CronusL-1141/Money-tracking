@@ -142,7 +142,7 @@ pub fn generate_short_id() -> String {
 
 /// 时间格式化工具
 pub mod time_utils {
-    use chrono::{DateTime, Local, NaiveDateTime, Utc};
+    use chrono::{Local, NaiveDateTime, Utc};
 
     /// 获取当前本地时间字符串
     pub fn current_local_time_string() -> String {
@@ -156,7 +156,8 @@ pub mod time_utils {
 
     /// 格式化时间戳
     pub fn format_timestamp(timestamp: i64) -> String {
-        if let Some(dt) = NaiveDateTime::from_timestamp_opt(timestamp, 0) {
+        use chrono::DateTime;
+        if let Some(dt) = DateTime::from_timestamp(timestamp, 0) {
             dt.format("%Y-%m-%d %H:%M:%S").to_string()
         } else {
             "Invalid timestamp".to_string()
