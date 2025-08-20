@@ -37,13 +37,14 @@ class AuditService:
         
         audit_logger.info(f"审计服务初始化完成，使用算法: {algorithm}")
     
-    def analyze_financial_data(self, file_path: str, output_file: Optional[str] = None) -> Optional[pd.DataFrame]:
+    def analyze_financial_data(self, file_path: str, output_file: Optional[str] = None, suppress_output: bool = False) -> Optional[pd.DataFrame]:
         """
         分析财务数据 - 完全复用main.py的逻辑，只替换追踪器
         
         Args:
             file_path: Excel文件路径
             output_file: 输出文件名
+            suppress_output: 是否抑制输出信息（用于基准测试）
             
         Returns:
             分析结果数据框，失败返回None
@@ -56,69 +57,87 @@ class AuditService:
             audit_logger.info("=" * 60)
             
             # 1. 数据预处理（完全复用）
-            print("📊 开始数据预处理...")
+            if not suppress_output:
+                print("📊 开始数据预处理...")
             df = self.data_processor.预处理财务数据(file_path)
             if df is None:
-                print("❌ 数据预处理失败")
+                if not suppress_output:
+                    print("❌ 数据预处理失败")
                 return None
-            print(f"✅ 数据预处理完成，共加载 {len(df):,} 条记录")
+            if not suppress_output:
+                print(f"✅ 数据预处理完成，共加载 {len(df):,} 条记录")
             
             # 2. 流水完整性验证（完全复用）
-            print("🔍 开始流水完整性验证...")
+            if not suppress_output:
+                print("🔍 开始流水完整性验证...")
             validation_result = self.flow_validator.validate_flow_integrity(df)
             if not validation_result['is_valid']:
-                print(f"⚠️  流水完整性验证发现 {validation_result['errors_count']} 个问题")
+                if not suppress_output:
+                    print(f"⚠️  流水完整性验证发现 {validation_result['errors_count']} 个问题")
                 audit_logger.warning(f"流水完整性验证发现{validation_result['errors_count']}个问题")
                 
                 if validation_result['optimization_failed']:
-                    print("❌ 流水优化失败，无法自动修复数据完整性问题")
+                    if not suppress_output:
+                        print("❌ 流水优化失败，无法自动修复数据完整性问题")
                     audit_logger.error("❌ 流水优化失败，无法自动修复数据完整性问题")
                     
                     # 保存错误报告
                     error_report_file = f"流水验证错误报告_{self.algorithm}.txt"
                     self._save_error_report(validation_result, error_report_file)
-                    print(f"📄 错误详情已保存至: {error_report_file}")
+                    if not suppress_output:
+                        print(f"📄 错误详情已保存至: {error_report_file}")
                     audit_logger.info(f"📄 错误详情已保存至: {error_report_file}")
                     return None
                 
                 if validation_result['optimizations_count'] > 0:
-                    print(f"🔧 已通过重排序修复 {validation_result['optimizations_count']} 个问题")
+                    if not suppress_output:
+                        print(f"🔧 已通过重排序修复 {validation_result['optimizations_count']} 个问题")
                     audit_logger.info(f"已通过重排序修复{validation_result['optimizations_count']}个问题")
                     df = validation_result['result_dataframe']
-                    print("✅ 使用修复后的数据继续处理（源文件保持不变）")
+                    if not suppress_output:
+                        print("✅ 使用修复后的数据继续处理（源文件保持不变）")
                     audit_logger.info("✅ 使用修复后的数据继续处理（源文件保持不变）")
             else:
-                print("✅ 流水完整性验证通过")
-                sys.stdout.flush()
+                if not suppress_output:
+                    print("✅ 流水完整性验证通过")
+                    sys.stdout.flush()
                 audit_logger.info("✅ 流水完整性验证通过")
             
             # 3. 数据验证（完全复用）
-            print("🔎 开始数据验证...")
+            if not suppress_output:
+                print("🔎 开始数据验证...")
             validation_result = self.data_processor.验证数据完整性(df)
             if not validation_result['is_valid']:
-                print("⚠️  数据验证发现问题，但继续处理")
+                if not suppress_output:
+                    print("⚠️  数据验证发现问题，但继续处理")
                 audit_logger.warning("数据验证发现问题，但继续处理")
                 for error in validation_result['errors'][:5]:
                     audit_logger.warning(error)
             else:
-                print("✅ 数据验证通过")
+                if not suppress_output:
+                    print("✅ 数据验证通过")
             
             # 4. 计算初始余额（完全复用）
-            print("💰 计算初始余额...")
+            if not suppress_output:
+                print("💰 计算初始余额...")
             初始余额 = self.data_processor.计算初始余额(df)
             if 初始余额 > 0:
-                print(f"📊 初始余额: {初始余额:,.2f} 元")
+                if not suppress_output:
+                    print(f"📊 初始余额: {初始余额:,.2f} 元")
                 self.tracker.初始化余额(初始余额, '公司')
             else:
-                print("📊 无初始余额")
+                if not suppress_output:
+                    print("📊 无初始余额")
             
             # 5. 逐笔处理交易（使用新的追踪器）
-            print(f"🚀 开始 {self.algorithm} 资金追踪分析...")
+            if not suppress_output:
+                print(f"🚀 开始 {self.algorithm} 资金追踪分析...")
             audit_logger.info(f"开始{self.algorithm}资金追踪分析...")
-            self._process_transactions(df)
+            self._process_transactions(df, suppress_output)
             
             # 6. 生成分析结果
-            print("📈 生成分析结果...")
+            if not suppress_output:
+                print("📈 生成分析结果...")
             audit_logger.info(f"{self.algorithm}资金追踪完成！")
             self._generate_analysis_results(df)
             
@@ -146,20 +165,22 @@ class AuditService:
             traceback.print_exc()
             return None
     
-    def _process_transactions(self, df: pd.DataFrame) -> None:
+    def _process_transactions(self, df: pd.DataFrame, suppress_output: bool = False) -> None:
         """
         处理所有交易 - 复用main.py逻辑，使用新追踪器
         """
         total_count = len(df)
-        print(f"📋 总共需要处理 {total_count:,} 条交易记录")
+        if not suppress_output:
+            print(f"📋 总共需要处理 {total_count:,} 条交易记录")
         sys.stdout.flush()
         
         for i, (idx, row) in enumerate(df.iterrows()):
             # 显示详细的处理进度（减少频率，避免日志过密）
             if i % (Config.PROGRESS_INTERVAL * 2) == 0:  # 每2000条显示一次
                 progress_percent = (i / total_count) * 100
-                print(f"⏳ 处理进度: {i:,}/{total_count:,} ({progress_percent:.1f}%)")
-                sys.stdout.flush()  # 强制刷新输出
+                if not suppress_output:
+                    print(f"⏳ 处理进度: {i:,}/{total_count:,} ({progress_percent:.1f}%)")
+                    sys.stdout.flush()  # 强制刷新输出
                 audit_logger.info(f"处理进度: {i}/{len(df)}")
             
             # 处理单行交易（完全复用DataProcessor）
@@ -176,7 +197,8 @@ class AuditService:
             # 更新结果列
             self._update_result_columns(df, i)
         
-        print(f"✅ 所有 {total_count:,} 条交易记录处理完成")
+        if not suppress_output:
+            print(f"✅ 所有 {total_count:,} 条交易记录处理完成")
         sys.stdout.flush()
     
     def _process_income_transaction(self, row: pd.Series, 处理结果: Dict[str, Any], df: pd.DataFrame, row_idx: int) -> None:
