@@ -29,20 +29,20 @@ const HomePage: React.FC = () => {
     {
       icon: <AssessmentIcon color="primary" />,
       titleKey: 'analysis.title',
-      descriptionKey: 'analysis.algorithm_description.fifo',
+      descriptionKey: 'analysis.algorithm_description.overview',
       action: () => navigate('/audit'),
     },
     {
       icon: <SearchIcon color="primary" />,
       titleKey: 'query.title',
-      descriptionKey: 'query.query_result',
+      descriptionKey: 'query.query_description',
       action: () => navigate('/query'),
     },
   ];
 
   const algorithms = [
     {
-      name: 'FIFO',
+      name: t('analysis.fifo'),
       description: t('analysis.algorithm_description.fifo'),
       icon: <TrendingUpIcon />,
     },
@@ -57,7 +57,17 @@ const HomePage: React.FC = () => {
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* 欢迎标题 */}
       <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Typography variant="h3" component="h1" gutterBottom>
+        <Typography 
+          variant="h3" 
+          component="h1" 
+          gutterBottom
+          sx={{ 
+            whiteSpace: 'normal',
+            lineHeight: 1.3,
+            fontSize: { xs: '1.8rem', sm: '2.5rem', md: '3rem' },
+            textAlign: 'center'
+          }}
+        >
           {t('app.title')}
         </Typography>
         <Typography variant="h6" color="text.secondary">
@@ -111,7 +121,7 @@ const HomePage: React.FC = () => {
             {t('audit.algorithm')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            系统支持两种核心算法，您可以根据审计需求选择合适的分析方法
+            {t('homepage.algorithm_intro')}
           </Typography>
           
           <List>
@@ -144,46 +154,46 @@ const HomePage: React.FC = () => {
       <Card>
         <CardContent sx={{ p: 3 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            系统特性
+            {t('homepage.system_features')}
           </Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="primary" gutterBottom>
-                  50万+
+                  {t('homepage.features.data_capacity.value')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  最大数据处理量
+                  {t('homepage.features.data_capacity.description')}
                 </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="primary" gutterBottom>
-                  双算法
+                  {t('homepage.features.dual_algorithm.value')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  FIFO + 差额计算
+                  {t('homepage.features.dual_algorithm.description')}
                 </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="primary" gutterBottom>
-                  离线
+                  {t('homepage.features.offline.value')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  完全本地化处理
+                  {t('homepage.features.offline.description')}
                 </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="primary" gutterBottom>
-                  专业
+                  {t('homepage.features.professional.value')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  审计级别报告
+                  {t('homepage.features.professional.description')}
                 </Typography>
               </Box>
             </Grid>

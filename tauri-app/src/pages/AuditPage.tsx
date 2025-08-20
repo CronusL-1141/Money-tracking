@@ -13,6 +13,7 @@ import {
   MenuItem,
   TextField,
   Grid,
+  useTheme,
   Paper,
 } from '@mui/material';
 import {
@@ -27,19 +28,33 @@ import { open } from '@tauri-apps/api/dialog';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAppState } from '../contexts/AppStateContext';
+import { getCurrentLocalTime, createLogMessage } from '../utils/timeUtils';
 import type { AuditConfig, AuditResult, ProcessStatus } from '../types/rust-commands';
 
 const AuditPage: React.FC = () => {
   const { t } = useTranslation();
   const { showNotification } = useNotification();
-  const [algorithm, setAlgorithm] = useState<'FIFO' | 'BALANCE_METHOD'>('FIFO');
-  const [inputFile, setInputFile] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [analysisLog, setAnalysisLog] = useState<string[]>([]);
-  const [currentStep, setCurrentStep] = useState<string>('');
+  const theme = useTheme();
+  const { 
+    auditState, 
+    updateAuditState, 
+    appendAuditLog, 
+    clearAuditLog 
+  } = useAppState();
+  
+  // 从全局状态解构所需的值
+  const {
+    algorithm,
+    inputFile,
+    isAnalyzing,
+    progress,
+    analysisLog,
+    currentStep,
+    isDragOver
+  } = auditState;
+  
   const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
   // 设置Tauri文件拖拽监听
@@ -56,23 +71,24 @@ const AuditPage: React.FC = () => {
             
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
-              setInputFile(filePath);
+              updateAuditState({ inputFile: filePath });
+              appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
               showNotification({
                 type: 'success',
-                title: '文件拖拽成功',
-                message: `已选择文件: ${fileName}`,
+                title: t('notifications.success.file_drag_success'),
+                message: t('notifications.success.file_selected', { filename: fileName }),
               });
             } else {
               showNotification({
                 type: 'warning',
-                title: '文件格式不支持',
-                message: '请选择Excel文件(.xlsx或.xls)',
+                title: t('notifications.errors.file_format_unsupported'),
+                message: t('notifications.errors.please_select_excel'),
               });
             }
           }
         });
       } catch (error) {
-        console.error('设置文件拖拽监听器失败:', error);
+        console.error('Failed to setup file drag listener:', error);
       }
     };
 
@@ -89,28 +105,30 @@ const AuditPage: React.FC = () => {
   const handleSelectFile = async () => {
     try {
       const selected = await open({
-        title: '选择Excel文件',
+        title: t('notifications.success.file_selection'),
         multiple: false,
         filters: [{
-          name: 'Excel文件',
+          name: t('file_types.excel_files'),
           extensions: ['xlsx', 'xls']
         }]
       });
 
       if (selected && typeof selected === 'string') {
-        setInputFile(selected);
+        const fileName = selected.split(/[/\\]/).pop() || '';
+        updateAuditState({ inputFile: selected });
+        appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
         showNotification({
           type: 'success',
-          title: '文件选择',
-          message: `已选择文件: ${selected.split(/[/\\]/).pop()}`,
+          title: t('notifications.success.file_selection'),
+          message: t('notifications.success.file_selected', { filename: fileName }),
         });
       }
     } catch (error) {
-      console.error('文件选择失败:', error);
+      console.error('File selection failed:', error);
       showNotification({
         type: 'error',
-        title: '文件选择失败',
-        message: String(error),
+        title: t('notifications.errors.file_selection_failed'),
+        message: t('notifications.errors.file_operation_failed'),
       });
     }
   };
@@ -119,19 +137,19 @@ const AuditPage: React.FC = () => {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
+          updateAuditState({ isDragOver: true });
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    updateAuditState({ isDragOver: false });
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    updateAuditState({ isDragOver: false });
     // 实际文件处理由Tauri的文件拖拽监听器完成
     // 这里只处理拖拽区域的视觉反馈
   }, []);
@@ -140,21 +158,26 @@ const AuditPage: React.FC = () => {
     if (!inputFile) {
       showNotification({
         type: 'warning',
-        title: '请选择文件',
-        message: '请先选择要分析的Excel文件',
+        title: t('notifications.errors.select_file_first'),
+        message: t('notifications.errors.select_excel_first'),
       });
       return;
     }
     
-    setIsAnalyzing(true);
-    setProgress(0);
-    setAnalysisLog([]);
-    setCurrentStep('初始化分析...');
+    updateAuditState({
+      isAnalyzing: true,
+      progress: 0,
+      currentStep: t('process_status.initializing')
+    });
+    clearAuditLog();
+    appendAuditLog(createLogMessage(`开始分析：${inputFile.split(/[/\\]/).pop()}, 算法：${algorithm === 'FIFO' ? 'FIFO计算法' : '差额计算法'}`, 'info'));
     
     try {
       // 直接调用后端分析（真实实现），后端会统一管理所有日志
-      setCurrentStep('准备分析环境...');
-      setProgress(5);
+      updateAuditState({
+        currentStep: t('process_status.preparing'),
+        progress: 5
+      });
       
       const config: AuditConfig = {
         algorithm,
@@ -174,21 +197,21 @@ const AuditPage: React.FC = () => {
           if (status) {
             // 更新进度条
             if (status.running && status.progress !== null && status.progress !== undefined) {
-              setProgress(status.progress);
+              updateAuditState({ progress: status.progress });
             }
             
             // 更新当前步骤
             if (status.message) {
-              setCurrentStep(status.message);
+              updateAuditState({ currentStep: status.message });
             }
             
             // 更新分析日志（后端统一管理）
             if (status.output_log && status.output_log.length > 0) {
-              setAnalysisLog(status.output_log);
+              updateAuditState({ analysisLog: status.output_log });
             }
           }
         } catch (error) {
-          console.warn('获取进度状态失败:', error);
+          console.warn('Failed to get progress status:', error);
         }
       }, 200); // 更快的更新频率，每0.2秒检查一次
       
@@ -201,41 +224,43 @@ const AuditPage: React.FC = () => {
       clearInterval(interval);
       setProgressInterval(null);
       
-      const timestamp2 = new Date().toLocaleString();
       if (result.success) {
-        setAnalysisLog(prev => [...prev, `[${timestamp2}] ✅ 分析完成`]);
-        setAnalysisLog(prev => [...prev, `[${timestamp2}] 结果: ${result.message}`]);
+        appendAuditLog(createLogMessage(t('process_status.completed'), 'success'));
+        appendAuditLog(createLogMessage(`${t('ui.labels.result')}: ${result.message}`, 'info'));
         if (result.output_files && result.output_files.length > 0) {
-          setAnalysisLog(prev => [...prev, `[${timestamp2}] 输出文件: ${result.output_files.join(', ')}`]);
+          appendAuditLog(createLogMessage(`${t('ui.labels.output_files')}: ${result.output_files.join(', ')}`, 'info'));
         }
         
         showNotification({
           type: 'success',
-          title: '分析完成',
-          message: '资金追踪分析已完成，请查看结果',
+          title: t('notifications.success.analysis_success'),
+          message: t('notifications.success.analysis_completed'),
         });
         
-        setProgress(100);
-        setCurrentStep('分析完成');
+        updateAuditState({
+          progress: 100,
+          currentStep: t('process_status.completed')
+        });
       } else {
         throw new Error(result.message);
       }
       
     } catch (error) {
-      console.error('分析失败:', error);
-      const timestamp = new Date().toLocaleString();
-      setAnalysisLog(prev => [...prev, `[${timestamp}] ❌ 分析失败: ${String(error)}`]);
-      
+      console.error('Analysis failed:', error);
+      appendAuditLog(createLogMessage(`${t('process_status.failed')}: ${t('notifications.errors.analysis_execution_failed')}`, 'error'));
+
       showNotification({
         type: 'error',
-        title: '分析失败',
-        message: String(error),
+        title: t('notifications.errors.analysis_failed'),
+        message: t('notifications.errors.analysis_execution_failed'),
       });
       
-      setProgress(0);
-      setCurrentStep('分析失败');
+      updateAuditState({
+        progress: 0,
+        currentStep: t('process_status.failed')
+      });
     } finally {
-      setIsAnalyzing(false);
+      updateAuditState({ isAnalyzing: false });
       // 确保清理定时器
       if (progressInterval) {
         clearInterval(progressInterval);
@@ -256,24 +281,26 @@ const AuditPage: React.FC = () => {
       }
       
       if (stopped) {
-        setIsAnalyzing(false);
-        setProgress(0);
-        setCurrentStep('分析已停止');
+        updateAuditState({
+          isAnalyzing: false,
+          progress: 0,
+          currentStep: t('process_status.stopped')
+        });
         
         showNotification({
           type: 'info',
-          title: '分析已停止',
-          message: 'UI已停止更新，Python进程可能仍在后台运行',
+          title: t('notifications.success.analysis_stopped'),
+          message: t('notifications.info.ui_stopped'),
         });
       } else {
         showNotification({
           type: 'warning',
-          title: '停止失败',
-          message: '当前没有正在运行的分析任务',
+          title: t('notifications.errors.stop_failed'),
+          message: t('notifications.errors.no_running_analysis'),
         });
       }
     } catch (error) {
-      console.error('停止分析失败:', error);
+      console.error('Failed to stop analysis:', error);
     }
   };
 
@@ -289,7 +316,7 @@ const AuditPage: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                分析配置
+                {t('ui.panels.analysis_config')}
               </Typography>
               
               <FormControl fullWidth sx={{ mb: 2 }}>
@@ -300,7 +327,7 @@ const AuditPage: React.FC = () => {
                   labelId="algorithm-select-label"
                   value={algorithm}
                   label={t('analysis.algorithm')}
-                  onChange={(e) => setAlgorithm(e.target.value as 'FIFO' | 'BALANCE_METHOD')}
+                  onChange={(e) => updateAuditState({ algorithm: e.target.value as 'FIFO' | 'BALANCE_METHOD' })}
                   disabled={isAnalyzing}
                 >
                   <MenuItem value="FIFO">{t('analysis.fifo')}</MenuItem>
@@ -317,15 +344,17 @@ const AuditPage: React.FC = () => {
                 sx={{
                   p: 3,
                   mb: 2,
-                  border: isDragOver ? '2px dashed #1976d2' : '2px dashed #ddd',
-                  backgroundColor: isDragOver ? '#f3f9ff' : '#fafafa',
+                  border: isDragOver ? `2px dashed ${theme.palette.primary.main}` : `2px dashed ${theme.palette.divider}`,
+                  backgroundColor: isDragOver 
+                    ? theme.palette.mode === 'dark' ? 'rgba(144, 202, 249, 0.08)' : 'rgba(25, 118, 210, 0.08)'
+                    : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
                   borderRadius: 2,
                   textAlign: 'center',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   '&:hover': {
-                    borderColor: '#1976d2',
-                    backgroundColor: '#f9f9f9',
+                    borderColor: theme.palette.primary.main,
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                   }
                 }}
                 onClick={handleSelectFile}
@@ -335,7 +364,7 @@ const AuditPage: React.FC = () => {
                   <UploadIcon 
                     sx={{ 
                       fontSize: 48, 
-                      color: isDragOver ? '#1976d2' : '#666',
+                      color: isDragOver ? theme.palette.primary.main : theme.palette.text.secondary,
                       mb: 1 
                     }} 
                   />
@@ -346,14 +375,14 @@ const AuditPage: React.FC = () => {
                         {inputFile.split(/[/\\]/).pop()}
                       </Box>
                     ) : (
-                      isDragOver ? '松开鼠标以选择文件' : '拖拽Excel文件到此处'
+                      isDragOver ? t('ui.dragdrop.release_to_select_audit') : t('ui.dragdrop.drag_excel_here')
                     )}
                   </Typography>
                   <Typography variant="body2" color="textSecondary" gutterBottom>
                     {inputFile ? (
-                      '点击更换文件'
+                      t('ui.dragdrop.click_to_change')
                     ) : (
-                      '支持 .xlsx 和 .xls 格式'
+                      t('ui.dragdrop.supported_formats')
                     )}
                   </Typography>
                   <Button
@@ -366,7 +395,7 @@ const AuditPage: React.FC = () => {
                       handleSelectFile();
                     }}
                   >
-                    {inputFile ? '更换文件' : '浏览文件'}
+                    {inputFile ? t('ui.buttons.change_file') : t('ui.buttons.browse_file')}
                   </Button>
                 </Box>
               </Paper>
@@ -425,13 +454,13 @@ const AuditPage: React.FC = () => {
                 </Box>
               ) : (
                 <Alert severity="info">
-                  {inputFile ? '准备就绪，点击开始分析' : '请先选择输入文件'}
+                  {inputFile ? t('ui.status.ready_to_analyze') : t('ui.status.select_file_first')}
                 </Alert>
               )}
 
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 3, mb: 1 }}>
                 <Typography variant="h6">
-                  分析日志
+                  {t('ui.panels.analysis_log')}
                 </Typography>
                 {analysisLog.length > 0 && (
                   <Button
@@ -442,21 +471,21 @@ const AuditPage: React.FC = () => {
                       navigator.clipboard.writeText(logText).then(() => {
                         showNotification({
                           type: 'success',
-                          title: '复制成功',
-                          message: `已复制${analysisLog.length}行日志到剪贴板`,
+                          title: t('notifications.success.copy_success'),
+                          message: t('notifications.success.copy_completed', { count: analysisLog.length }),
                         });
                       }).catch(err => {
-                        console.error('复制失败:', err);
+                        console.error('Copy failed:', err);
                         showNotification({
                           type: 'error',
-                          title: '复制失败',
-                          message: '无法访问剪贴板',
+                          title: t('notifications.errors.copy_failed'),
+                          message: t('notifications.errors.clipboard_access_denied'),
                         });
                       });
                     }}
                     sx={{ fontSize: '0.75rem', minWidth: 'auto', px: 1.5 }}
                   >
-                    📋 复制全部
+                    📋 {t('ui.buttons.copy_all')}
                   </Button>
                 )}
               </Box>
@@ -466,13 +495,13 @@ const AuditPage: React.FC = () => {
                   p: 2,
                   maxHeight: 400,
                   overflow: 'auto',
-                  backgroundColor: '#f8f9fa',
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#f8f9fa',
                   fontFamily: 'Consolas, "Courier New", monospace',
                   fontSize: '0.8rem',
                   lineHeight: 1.4,
                   userSelect: 'text', // 允许文本选择
                   cursor: 'text', // 文本光标
-                  border: '1px solid #e0e0e0',
+                  border: `1px solid ${theme.palette.divider}`,
                   borderRadius: 1,
                   '& *': {
                     userSelect: 'text', // 确保所有子元素都可以选择
@@ -482,14 +511,14 @@ const AuditPage: React.FC = () => {
                     width: '8px',
                   },
                   '&::-webkit-scrollbar-track': {
-                    backgroundColor: '#f1f1f1',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : '#f1f1f1',
                   },
                   '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: '#c1c1c1',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : '#c1c1c1',
                     borderRadius: '4px',
                   },
                   '&::-webkit-scrollbar-thumb:hover': {
-                    backgroundColor: '#a8a8a8',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : '#a8a8a8',
                   },
                 }}
                 variant="outlined"
@@ -503,12 +532,12 @@ const AuditPage: React.FC = () => {
                           mb: 0.3,
                           padding: '2px 4px',
                           borderRadius: '2px',
-                          backgroundColor: log.includes('ERROR') || log.includes('错误') || log.includes('失败') ? 'rgba(244, 67, 54, 0.1)' : 
-                                          log.includes('WARNING') || log.includes('警告') ? 'rgba(255, 152, 0, 0.1)' :
-                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-                          color: log.includes('ERROR') || log.includes('错误') || log.includes('失败') ? '#d32f2f' : 
-                                 log.includes('WARNING') || log.includes('警告') ? '#f57c00' :
-                                 log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') ? '#388e3c' : '#333',
+                          backgroundColor: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? `${theme.palette.error.main}20` : 
+                                          log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? `${theme.palette.warning.main}20` :
+                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? `${theme.palette.success.main}20` : 'transparent',
+                          color: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? theme.palette.error.main : 
+                                 log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? theme.palette.warning.main :
+                                 log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? theme.palette.success.main : theme.palette.text.primary,
                           whiteSpace: 'pre-wrap', // 保持换行和空格
                           wordBreak: 'break-all', // 长行自动换行
                         }}
@@ -529,9 +558,9 @@ const AuditPage: React.FC = () => {
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    🔍 Python分析日志将实时显示在此处...
+                    {t('ui.status.analysis_log_placeholder')}
                     <br />
-                    <small>支持文本选择和复制粘贴</small>
+                    <small>{t('ui.status.text_selection_hint')}</small>
                   </Typography>
                 )}
               </Paper>

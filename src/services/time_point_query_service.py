@@ -419,6 +419,12 @@ class TimePointQueryService:
             
             self.processing_steps.append(step_info)
             
+            # 将计算出的行为性质存储回DataFrame中，以便查询结果时使用
+            if self.data is not None:
+                self.data.at[row_idx, '行为性质'] = 行为性质
+                self.data.at[row_idx, '个人占比'] = 个人占比
+                self.data.at[row_idx, '公司占比'] = 公司占比
+            
             return {
                 "success": True,
                 "message": f"第 {row_idx + 1} 行处理成功",
@@ -474,10 +480,9 @@ class TimePointQueryService:
         if self.tracker is None:
             return {}
         
-        # 计算净挪用金额（个人应还 - 公司应还）
-        personal_owed = self.tracker.累计挪用金额 - self.tracker.累计已归还个人本金
-        company_owed = self.tracker.累计垫付金额 - self.tracker.累计已归还公司本金
-        net_misappropriation = personal_owed - company_owed
+        # 计算资金缺口：累计挪用 - 累计个人归还公司本金
+        资金缺口 = (self.tracker.累计挪用金额 - 
+                   self.tracker.累计由资金池回归个人余额本金)
         
         return {
             "personal_balance": self.tracker.个人余额,
@@ -485,12 +490,11 @@ class TimePointQueryService:
             "total_balance": self.tracker.个人余额 + self.tracker.公司余额,
             "total_misappropriation": self.tracker.累计挪用金额,  # 修复字段名匹配前端期望
             "total_advance": self.tracker.累计垫付金额,
-            "total_returned": self.tracker.累计已归还公司本金,
-            "personal_profit": self.tracker.总计个人分配利润,
-            "company_profit": self.tracker.总计公司分配利润,
-            "personal_owed": personal_owed,  # 个人应还
-            "company_owed": company_owed,    # 公司应还
-            "net_misappropriation": net_misappropriation,  # 净挪用（个人应还 - 公司应还）
+            "total_returned_company": self.tracker.累计由资金池回归公司余额本金,
+            "total_returned_personal": self.tracker.累计由资金池回归个人余额本金,
+            "personal_profit": self.tracker.总计个人应分配利润,
+            "company_profit": self.tracker.总计公司应分配利润,
+            "funding_gap": 资金缺口,       # 统一的资金缺口字段
             "is_initialized": self.tracker.已初始化
         }
     
@@ -577,7 +581,112 @@ class TimePointQueryService:
         if self.error_records:
             result["errors"] = self.error_records[-5:]  # 最近5个错误
         
+        # 添加当前时点可用的资金池信息
+        if hasattr(self.tracker, '_投资产品资金池') and self.tracker._投资产品资金池:
+            available_pools = []
+            for pool_name, pool_info in self.tracker._投资产品资金池.items():
+                if pool_info.get('总金额', 0) != 0:  # 只显示有余额的资金池
+                    available_pools.append({
+                        'name': pool_name,
+                        'total_amount': pool_info.get('总金额', 0),
+                        'personal_ratio': pool_info.get('个人占比', 0),
+                        'company_ratio': pool_info.get('公司占比', 0)
+                    })
+            result["available_fund_pools"] = available_pools
+        
         return result
+    
+    def query_fund_pool(self, pool_name: str) -> Dict[str, Any]:
+        """
+        查询指定资金池的详细信息
+        
+        Args:
+            pool_name: 资金池名称
+            
+        Returns:
+            资金池查询结果
+        """
+        try:
+            if self.tracker is None:
+                return {
+                    "success": False,
+                    "message": "追踪器未初始化"
+                }
+            
+            # 直接在这里实现资金池查询，避免循环导入
+            if not hasattr(self.tracker, '_场外资金池记录') or not self.tracker._场外资金池记录:
+                return {
+                    "success": False,
+                    "message": "没有找到资金池记录"
+                }
+            
+            # 筛选指定资金池的记录
+            pool_records = [
+                record for record in self.tracker._场外资金池记录
+                if record.get('资金池名称') == pool_name
+            ]
+            
+            if not pool_records:
+                return {
+                    "success": False,
+                    "message": f"没有找到资金池 {pool_name} 的记录"
+                }
+            
+            # 处理记录，移除不需要的字段
+            filtered_records = []
+            for record in pool_records:
+                filtered_record = {
+                    '交易时间': record.get('交易时间', ''),
+                    '资金池名称': record.get('资金池名称', ''),
+                    '入金': record.get('入金', 0),
+                    '出金': record.get('出金', 0),
+                    '总余额': record.get('总余额', 0),
+                    '单笔资金占比': record.get('单笔资金占比', record.get('资金占比', '')),
+                    '总资金占比': record.get('总资金占比', '')
+                    # 不包含：行为性质、累计申购、累计赎回
+                }
+                filtered_records.append(filtered_record)
+            
+            # 计算汇总信息
+            total_inflow = sum(record.get('入金', 0) for record in pool_records if isinstance(record.get('入金'), (int, float)))
+            total_outflow = sum(record.get('出金', 0) for record in pool_records if isinstance(record.get('出金'), (int, float)))
+            
+            # 获取最新余额
+            latest_record = pool_records[-1]
+            current_balance = latest_record.get('总余额', 0)
+            
+            # 添加总计行
+            summary_record = {
+                '交易时间': '── 总计 ──',
+                '资金池名称': f'{pool_name} 汇总',
+                '入金': f'总入金: ¥{total_inflow:,.0f}',
+                '出金': f'总出金: ¥{total_outflow:,.0f}',
+                '总余额': f'当前余额: ¥{current_balance:,.0f}',
+                '单笔资金占比': '── 汇总 ──',
+                '总资金占比': f'净变化: ¥{current_balance:,.0f}'
+            }
+            filtered_records.append(summary_record)
+            
+            return {
+                "success": True,
+                "pool_name": pool_name,
+                "records": filtered_records,
+                "summary": {
+                    "total_inflow": total_inflow,
+                    "total_outflow": total_outflow,
+                    "current_balance": current_balance,
+                    "record_count": len(pool_records)
+                }
+            }
+            
+        except Exception as e:
+            error_msg = f"资金池查询失败: {str(e)}"
+            audit_logger.error(error_msg)
+            return {
+                "success": False,
+                "message": error_msg,
+                "error_details": str(e)
+            }
     
     def _clean_behavior_description(self, behavior: str) -> str:
         """
@@ -730,7 +839,8 @@ class TimePointQueryService:
                     "总余额": state.get("total_balance", 0),
                     "累计挪用": state.get("total_misuse", 0),
                     "累计垫付": state.get("total_advance", 0),
-                    "已归还本金": state.get("total_returned", 0),
+                    "已归还公司本金": state.get("total_returned_company", 0),
+                    "已归还个人本金": state.get("total_returned_personal", 0),
                     "个人利润": state.get("personal_profit", 0),
                     "公司利润": state.get("company_profit", 0)
                 }])

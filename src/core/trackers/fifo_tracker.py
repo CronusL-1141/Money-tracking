@@ -68,19 +68,24 @@ class FIFOTracker(ITracker):
         return self._legacy_tracker.累计垫付金额
         
     @property
-    def 累计已归还公司本金(self) -> float:
-        """累计已归还公司本金"""
-        return self._legacy_tracker.累计已归还公司本金
+    def 累计由资金池回归公司余额本金(self) -> float:
+        """累计由资金池回归公司余额本金"""
+        return self._legacy_tracker.累计由资金池回归公司余额本金
         
     @property
-    def 总计个人分配利润(self) -> float:
-        """总计个人分配利润"""
-        return self._legacy_tracker.总计个人分配利润
+    def 累计由资金池回归个人余额本金(self) -> float:
+        """累计由资金池回归个人余额本金"""
+        return self._legacy_tracker.累计由资金池回归个人余额本金
         
     @property
-    def 总计公司分配利润(self) -> float:
-        """总计公司分配利润"""
-        return self._legacy_tracker.总计公司分配利润
+    def 总计个人应分配利润(self) -> float:
+        """总计个人应分配利润"""
+        return self._legacy_tracker.总计个人应分配利润
+        
+    @property
+    def 总计公司应分配利润(self) -> float:
+        """总计公司应分配利润"""
+        return self._legacy_tracker.总计公司应分配利润
         
     @property
     def 已初始化(self) -> bool:

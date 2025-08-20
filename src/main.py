@@ -209,19 +209,19 @@ class FIFO资金追踪分析器:
         # 记录当前余额、占比和行为性质
         df.iloc[row_idx, df.columns.get_loc('累计挪用')] = self.tracker.累计挪用金额
         df.iloc[row_idx, df.columns.get_loc('累计垫付')] = self.tracker.累计垫付金额
-        df.iloc[row_idx, df.columns.get_loc('累计已归还公司本金')] = self.tracker.累计已归还公司本金
+        df.iloc[row_idx, df.columns.get_loc('累计由资金池回归公司余额本金')] = self.tracker.累计由资金池回归公司余额本金
+        df.iloc[row_idx, df.columns.get_loc('累计由资金池回归个人余额本金')] = self.tracker.累计由资金池回归个人余额本金
         df.iloc[row_idx, df.columns.get_loc('累计非法所得')] = self.tracker.累计非法所得
-        df.iloc[row_idx, df.columns.get_loc('总计个人分配利润')] = self.tracker.总计个人分配利润
-        df.iloc[row_idx, df.columns.get_loc('总计公司分配利润')] = self.tracker.总计公司分配利润
+        df.iloc[row_idx, df.columns.get_loc('总计个人应分配利润')] = self.tracker.总计个人应分配利润
+        df.iloc[row_idx, df.columns.get_loc('总计公司应分配利润')] = self.tracker.总计公司应分配利润
         df.iloc[row_idx, df.columns.get_loc('个人余额')] = self.tracker.个人余额
         df.iloc[row_idx, df.columns.get_loc('公司余额')] = self.tracker.公司余额
         df.iloc[row_idx, df.columns.get_loc('总余额')] = self.tracker.个人余额 + self.tracker.公司余额
         
-        # 计算应还金额
-        # 个人应还 = 累计挪用 - 已归还公司本金（不能为负数）
-        个人应还金额 = max(0, self.tracker.累计挪用金额 - self.tracker.累计已归还公司本金)
-        df.iloc[row_idx, df.columns.get_loc('个人应还')] = 个人应还金额  # 个人应该还给公司的总金额
-        df.iloc[row_idx, df.columns.get_loc('公司应还')] = self.tracker.累计垫付金额  # 公司应该还给个人的总金额
+        # 计算资金缺口：累计挪用 - 累计个人归还公司本金
+        资金缺口 = (self.tracker.累计挪用金额 - 
+                   self.tracker.累计由资金池回归个人余额本金)
+        df.iloc[row_idx, df.columns.get_loc('资金缺口')] = 资金缺口
     
     def _generate_analysis_results(self, df: pd.DataFrame) -> None:
         """生成分析结果"""
@@ -244,18 +244,20 @@ class FIFO资金追踪分析器:
         # 挪用和垫付情况
         audit_logger.info(f"挪用和垫付情况:")
         audit_logger.info(f"累计挪用金额（个人使用公司资金，包括投资挪用）: {self.tracker.累计挪用金额:,.2f}")
-        audit_logger.info(f"累计已归还公司本金（通过投资产品赎回归还）: {self.tracker.累计已归还公司本金:,.2f}")
+        audit_logger.info(f"累计由资金池回归公司余额本金: {self.tracker.累计由资金池回归公司余额本金:,.2f}")
+        audit_logger.info(f"累计由资金池回归个人余额本金: {self.tracker.累计由资金池回归个人余额本金:,.2f}")
         audit_logger.info(f"累计垫付金额（公司使用个人资金）: {self.tracker.累计垫付金额:,.2f}")
-        audit_logger.info(f"总计个人分配利润: {self.tracker.总计个人分配利润:,.2f}")
-        audit_logger.info(f"总计公司分配利润: {self.tracker.总计公司分配利润:,.2f}")
+        audit_logger.info(f"总计个人应分配利润: {self.tracker.总计个人应分配利润:,.2f}")
+        audit_logger.info(f"总计公司应分配利润: {self.tracker.总计公司应分配利润:,.2f}")
         
-        个人应还金额 = max(0, self.tracker.累计挪用金额 - self.tracker.累计已归还公司本金)
-        净挪用 = 个人应还金额 - self.tracker.累计垫付金额
+        # 计算资金缺口：个人累计挪用 - 个人归还
+        资金缺口 = (self.tracker.累计挪用金额 - 
+                   self.tracker.累计由资金池回归个人余额本金)
         
         audit_logger.info(f"汇总:")
-        audit_logger.info(f"个人应还公司总金额: {个人应还金额:,.2f}（挪用{self.tracker.累计挪用金额:,.2f} - 已归还本金{self.tracker.累计已归还公司本金:,.2f}）")
-        audit_logger.info(f"公司应还个人总金额: {self.tracker.累计垫付金额:,.2f}")
-        audit_logger.info(f"净挪用金额: {净挪用:,.2f}")
+        audit_logger.info(f"个人累计挪用: {self.tracker.累计挪用金额:,.2f}")
+        audit_logger.info(f"公司累计垫付: {self.tracker.累计垫付金额:,.2f}")
+        audit_logger.info(f"资金缺口: {资金缺口:,.2f} （挪用{self.tracker.累计挪用金额:,.2f} - 个人归还{self.tracker.累计由资金池回归个人余额本金:,.2f}）")
         
         # 投资产品明细表 - 已移至单独Excel文件
         # self._show_investment_products()

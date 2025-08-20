@@ -29,6 +29,47 @@ export interface QueryResult {
   success: boolean;
   data?: any;
   message: string;
+  processing_time?: number;
+  target_row?: number;
+  algorithm?: string;
+  total_rows?: number;
+  query_time?: string;
+  target_row_data?: any;
+  tracker_state?: any;
+  processing_stats?: any;
+  recent_steps?: any[];
+  errors?: any[];
+  available_fund_pools?: FundPool[];
+}
+
+export interface FundPool {
+  name: string;
+  total_amount: number;
+  personal_ratio: number;
+  company_ratio: number;
+}
+
+export interface FundPoolRecord {
+  交易时间: string;
+  资金池名称: string;
+  入金: number | string;
+  出金: number | string;
+  总余额: number | string;
+  单笔资金占比: string;
+  总资金占比: string;
+}
+
+export interface FundPoolQueryResult {
+  success: boolean;
+  message?: string;
+  pool_name?: string;
+  records?: FundPoolRecord[];
+  summary?: {
+    total_inflow: number;
+    total_outflow: number;
+    current_balance: number;
+    record_count: number;
+  };
 }
 
 export interface QueryHistory {
@@ -159,6 +200,18 @@ export class RustCommands {
   static async validateFilePath(path: string): Promise<boolean> {
     return invoke<boolean>('validate_file_path', { path });
   }
+
+  /**
+   * 资金池查询
+   */
+  static async queryFundPool(poolName: string, filePath: string, rowNumber: number, algorithm: string): Promise<FundPoolQueryResult> {
+    return invoke<FundPoolQueryResult>('query_fund_pool', { 
+      poolName, 
+      filePath, 
+      rowNumber, 
+      algorithm 
+    });
+  }
 }
 
 // 便捷的导出函数
@@ -175,5 +228,6 @@ export const {
   updateAppConfig,
   getFileInfo,
   exportQueryResult,
-  validateFilePath
+  validateFilePath,
+  queryFundPool
 } = RustCommands;

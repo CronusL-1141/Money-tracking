@@ -4,15 +4,55 @@
 use tokio::process::{Command};
 use std::process::Stdio;
 use std::path::PathBuf;
+
 use std::fs;
 use tokio::io::{BufReader, AsyncBufReadExt};
-use tauri::command;
+use tauri::{command, Manager};
 use tauri::State;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
 use log::{info, warn, error};
 use regex::Regex;
+
+#[cfg(target_os = "windows")]
+use windows::Win32::{
+    Foundation::{BOOL, HWND},
+    Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE},
+};
+
+#[cfg(target_os = "windows")]
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+
+// Windows深色主题设置函数
+#[cfg(target_os = "windows")]
+fn set_window_theme(window: &tauri::Window, dark_mode: bool) {
+    let handle = window.raw_window_handle();
+    if let RawWindowHandle::Win32(win32_handle) = handle {
+        let hwnd = HWND(win32_handle.hwnd as isize);
+        let dark_mode_flag: BOOL = BOOL(if dark_mode { 1 } else { 0 });
+        
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &dark_mode_flag as *const _ as *const _,
+                std::mem::size_of::<BOOL>() as u32,
+            );
+        }
+    }
+}
+
+// Tauri命令：设置窗口主题
+#[command]
+async fn set_window_dark_mode(window: tauri::Window, dark_mode: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        set_window_theme(&window, dark_mode);
+        info!("Window theme set to: {}", if dark_mode { "dark" } else { "light" });
+    }
+    Ok(())
+}
 
 // 数据类型定义
 #[derive(Debug, Serialize, Deserialize)]
@@ -381,20 +421,20 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
             
-            // 使用tokio处理并发读取stdout和stderr
-            let mut stdout_reader = BufReader::new(stdout);
+            // 采用与资金分析完全一致的方式：在主线程中实时处理stderr
             let mut stderr_reader = BufReader::new(stderr);
+            let stdout = stdout;
             
             let mut stdout_lines = Vec::new();
-            
             let mut stderr_lines = Vec::new();
             
-            // 简单处理stderr
-            let stderr_handle = tokio::spawn(async move {
+            // 异步任务只负责收集stdout，不更新状态
+            let stdout_handle = tokio::spawn(async move {
+                let mut stdout_reader = BufReader::new(stdout);
                 let mut lines = Vec::new();
                 loop {
                     let mut line = String::new();
-                    match stderr_reader.read_line(&mut line).await {
+                    match stdout_reader.read_line(&mut line).await {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             line = line.trim_end().to_string();
@@ -402,55 +442,56 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
                                 lines.push(line);
                             }
                         }
-                        Err(_) => break,
+                        Err(e) => {
+                            error!("Error reading stdout line: {}", e);
+                            break;
+                        }
                     }
                 }
                 lines
             });
             
-            // 读取stdout（JSON结果）
+            // 主线程实时读取stderr并更新日志 - 与资金分析一致
             loop {
                 let mut line = String::new();
-                match stdout_reader.read_line(&mut line).await {
+                match stderr_reader.read_line(&mut line).await {
                     Ok(0) => break, // EOF
                     Ok(_) => {
-                        line = line.trim_end().to_string(); // 移除换行符
-                        if !line.is_empty() {
-                            stdout_lines.push(line);
+                        let line_str = line.trim_end().to_string();
+                        if !line_str.is_empty() {
+                            stderr_lines.push(line_str.clone());
+                            
+                            // 实时更新进程状态 - 与资金分析完全一致的模式
+                            {
+                                let mut process_status = state.current_process.lock().await;
+                                process_status.output_log.push(format!("[{}] {}", 
+                                    chrono::Utc::now().format("%H:%M:%S"), 
+                                    line_str
+                                ));
+                                
+                                // 限制日志长度，避免内存占用过多
+                                if process_status.output_log.len() > 1000 {
+                                    process_status.output_log.drain(0..100);
+                                }
+                            }
                         }
                     }
                     Err(e) => {
-                        error!("Error reading stdout line: {}", e);
+                        error!("Error reading stderr line: {}", e);
                         break;
                     }
                 }
             }
             
-            // 等待stderr读取完成
-            if let Ok(stderr_result) = stderr_handle.await {
-                stderr_lines = stderr_result;
-            }
-            
-            // 将stderr调试信息添加到日志
-            {
-                let mut process_status = state.current_process.lock().await;
-                for line in &stderr_lines {
-                    process_status.output_log.push(format!("[{}] {}", 
-                        chrono::Utc::now().format("%H:%M:%S"), 
-                        line
-                    ));
-                }
-                
-                // 限制日志长度
-                if process_status.output_log.len() > 1000 {
-                    process_status.output_log.drain(0..100);
-                }
+            // 等待stdout收集完成
+            if let Ok(stdout_result) = stdout_handle.await {
+                stdout_lines = stdout_result;
             }
             
             // 等待子进程完成
             let exit_status = child.wait().await;
             let stdout_output = stdout_lines.join("\n");
-            let stderr_output = stderr_lines.join("\n");
+            let _stderr_output = stderr_lines.join("\n");  // 加前缀避免unused warning
             
             match exit_status {
                 Ok(status) if status.success() => {
@@ -1022,6 +1063,56 @@ fn extract_message_from_line(line: &str) -> String {
     }
 }
 
+// Tauri命令：资金池查询
+#[command]
+async fn query_fund_pool(pool_name: String, file_path: String, row_number: u32, algorithm: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    info!("Fund pool query: pool={}, file={}, row={}, algorithm={}", pool_name, file_path, row_number, algorithm);
+    
+    let python_exe = find_python_executable();
+    let project_root = get_project_root()?;
+    let script_path = project_root.join("src").join("services").join("fund_pool_cli.py");
+    
+    let mut cmd = Command::new(&python_exe);
+    cmd.current_dir(&project_root)
+        .arg("-u")  // 无缓冲模式，立即输出
+        .arg(script_path)
+        .arg("--file")
+        .arg(&file_path)
+        .arg("--row")
+        .arg(&row_number.to_string())
+        .arg("--algorithm")
+        .arg(&algorithm)
+        .arg("--pool")
+        .arg(&pool_name)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    
+    let result = match cmd.spawn() {
+        Ok(mut child) => {
+            // 获取输出
+            match child.wait_with_output().await {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    
+                    if output.status.success() {
+                        match serde_json::from_str::<serde_json::Value>(&stdout) {
+                            Ok(json_data) => Ok(json_data),
+                            Err(e) => Err(format!("Failed to parse JSON output: {}", e))
+                        }
+                    } else {
+                        Err(format!("Fund pool query failed: {}", stderr))
+                    }
+                },
+                Err(e) => Err(format!("Failed to execute fund pool query: {}", e))
+            }
+        },
+        Err(e) => Err(format!("Failed to spawn fund pool query process: {}", e))
+    };
+    
+    result
+}
+
 fn main() {
     // 初始化日志
     env_logger::init();
@@ -1048,10 +1139,21 @@ fn main() {
             update_app_config,
             get_file_info,
             export_query_result,
-            validate_file_path
+            validate_file_path,
+            set_window_dark_mode,
+            query_fund_pool
         ])
-        .setup(|_app| {
+        .setup(|app| {
             info!("Application setup completed");
+            
+            // 初始化Windows窗口主题（默认浅色）
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.get_window("main") {
+                    set_window_theme(&window, false);
+                }
+            }
+            
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -27,19 +27,24 @@ import {
   Download as DownloadIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAppState } from '../contexts/AppStateContext';
 import { checkPythonEnvironment } from '../services/pythonService';
 import { PythonEnvStatus } from '../types/python';
 import { AppSettings, ThemeMode, Language } from '../types/app';
+import { QueryHistoryStorage, DataCleanup } from '../utils/storageUtils';
+import { formatLocalTime } from '../utils/timeUtils';
 
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { themeMode, setThemeMode } = useTheme();
   const { currentLanguage, setLanguage, availableLanguages } = useLanguage();
   const { showNotification } = useNotification();
+  const { queryState, clearQueryHistory } = useAppState();
   
   const [settings, setSettings] = useState<AppSettings>({
     theme: themeMode,
@@ -51,7 +56,22 @@ const SettingsPage: React.FC = () => {
   
   const [pythonEnv, setPythonEnv] = useState<PythonEnvStatus | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>('v2.0.0-独立版');
+  const [storageStats, setStorageStats] = useState<{ count: number; lastSaved?: string } | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('v2.0.0-Standalone');
+
+  // 加载存储统计信息
+  useEffect(() => {
+    const loadStorageStats = () => {
+      try {
+        const stats = QueryHistoryStorage.getStats();
+        setStorageStats(stats);
+      } catch (error) {
+        console.error('Failed to load storage stats:', error);
+      }
+    };
+
+    loadStorageStats();
+  }, [queryState.history]); // 当查询历史变化时更新统计信息
 
   // 加载设置
   useEffect(() => {
@@ -63,7 +83,7 @@ const SettingsPage: React.FC = () => {
           setSettings(parsedSettings);
         }
       } catch (error) {
-        console.error('加载设置失败:', error);
+        console.error('Failed to load settings:', error);
       }
     };
 
@@ -79,24 +99,35 @@ const SettingsPage: React.FC = () => {
       setPythonEnv(status);
       
       if (status.python_available) {
+        const availableMessage = (() => {
+          const i18nString = t('settings_labels.python_available', { version: status.python_version });
+          // 根据当前语言提供回退
+          const currentLang = i18n.language || 'zh';
+          const directString = currentLang === 'en' 
+            ? `Python ${status.python_version} is available`
+            : `Python ${status.python_version} 可用`;
+          console.log('Python available interpolation:', { version: status.python_version, currentLang, i18nString, directString });
+          return i18nString.includes('{') ? directString : i18nString;
+        })();
+        
         showNotification({
           type: 'success',
-          title: 'Python环境检查',
-          message: `Python ${status.python_version} 可用`,
+          title: t('settings_labels.python_env_check'),
+          message: availableMessage,
         });
       } else {
         showNotification({
           type: 'error',
-          title: 'Python环境检查',
-          message: 'Python环境不可用',
+          title: t('settings_labels.python_env_check'),
+          message: t('settings_labels.python_not_available'),
         });
       }
     } catch (error) {
-      console.error('检查环境失败:', error);
+      console.error('Environment check failed:', error);
       showNotification({
         type: 'error',
-        title: '环境检查失败',
-        message: String(error),
+        title: t('notifications.errors.environment_check_failed'),
+        message: t('notifications.errors.environment_check_error'),
       });
     } finally {
       setCheckingEnv(false);
@@ -107,14 +138,14 @@ const SettingsPage: React.FC = () => {
   const handleCheckUpdate = () => {
     showNotification({
       type: 'info',
-      title: '独立版本',
-      message: '当前为独立运行版本，无需联网更新功能',
+      title: t('notifications.info.independent_version'),
+      message: t('notifications.info.no_update_needed'),
     });
   };
 
   // 获取应用版本
   const loadAppVersion = () => {
-    setAppVersion('v2.0.0-独立版');
+    setAppVersion('v2.0.0-Standalone');
   };
 
   // 保存设置
@@ -136,14 +167,14 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('success.settings_saved'),
-        message: '设置已成功保存并应用',
+        message: t('notifications.success.settings_saved'),
       });
     } catch (error) {
-      console.error('保存设置失败:', error);
+      console.error('Failed to save settings:', error);
       showNotification({
         type: 'error',
-        title: '保存设置失败',
-        message: String(error),
+        title: t('notifications.errors.settings_save_failed'),
+        message: t('notifications.errors.settings_operation_failed'),
       });
     }
   };
@@ -157,6 +188,59 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     handleCheckEnvironment();
   }, []);
+
+  // 数据管理处理函数
+  const handleClearQueryHistory = () => {
+    try {
+      clearQueryHistory();
+      showNotification({
+        type: 'success',
+        title: t('settings.data_management'),
+        message: t('settings.clear_history') + ' ' + t('notifications.success.operation_completed'),
+      });
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        title: t('settings.data_management'),
+        message: t('notifications.errors.operation_failed'),
+      });
+    }
+  };
+
+  const handleClearAllData = () => {
+    try {
+      DataCleanup.resetAllData();
+      clearQueryHistory(); // 同步清空当前状态
+      showNotification({
+        type: 'success',
+        title: t('settings.data_management'),
+        message: t('settings.clear_all_data') + ' ' + t('notifications.success.operation_completed'),
+      });
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        title: t('settings.data_management'),
+        message: t('notifications.errors.operation_failed'),
+      });
+    }
+  };
+
+  const handleDataCleanup = () => {
+    try {
+      DataCleanup.cleanupExpiredData();
+      showNotification({
+        type: 'success',
+        title: t('settings.data_management'),
+        message: t('placeholders.cleanup_completed'),
+      });
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        title: t('settings.data_management'),
+        message: t('notifications.errors.operation_failed'),
+      });
+    }
+  };
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto' }}>
@@ -222,7 +306,7 @@ const SettingsPage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary={t('settings.auto_save')}
-                    secondary="自动保存查询历史和分析结果"
+                    secondary={t('settings_labels.auto_save_description')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -236,7 +320,7 @@ const SettingsPage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary={t('settings.notifications')}
-                    secondary="显示系统通知和操作提示"
+                    secondary={t('settings_labels.notifications_description')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -255,7 +339,7 @@ const SettingsPage: React.FC = () => {
                 value={settings.maxHistoryRecords}
                 onChange={(e) => updateSetting('maxHistoryRecords', parseInt(e.target.value) || 100)}
                 inputProps={{ min: 10, max: 1000 }}
-                helperText="查询历史记录的最大保存数量 (10-1000)"
+                helperText={t('settings_labels.max_history_help')}
                 sx={{ mt: 2 }}
               />
             </CardContent>
@@ -289,12 +373,12 @@ const SettingsPage: React.FC = () => {
                   >
                     <Typography variant="subtitle2">
                       {t('settings.environment_status')}: {
-                        pythonEnv.python_available ? '正常' : '异常'
+                        pythonEnv.python_available ? t('settings_labels.environment_status_normal') : t('settings_labels.environment_status_error')
                       }
                     </Typography>
                     {pythonEnv.python_version && (
                       <Typography variant="body2">
-                        Python版本: {pythonEnv.python_version}
+                        {t('settings_labels.python_version')}: {pythonEnv.python_version}
                       </Typography>
                     )}
                   </Alert>
@@ -302,13 +386,13 @@ const SettingsPage: React.FC = () => {
                   <List dense>
                     <ListItem>
                       <ListItemText
-                        primary="Python路径"
+                        primary={t('settings_labels.python_path')}
                         secondary={pythonEnv.python_path || 'N/A'}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText
-                        primary="项目根目录"
+                        primary={t('settings_labels.project_root')}
                         secondary={pythonEnv.project_root || 'N/A'}
                       />
                     </ListItem>
@@ -316,7 +400,95 @@ const SettingsPage: React.FC = () => {
                 </Box>
               ) : (
                 <Alert severity="info">
-                  点击检查环境按钮来验证Python配置
+                  {t('settings_labels.click_check_env_hint')}
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* 数据管理 */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                {t('settings.data_management')}
+              </Typography>
+
+              {/* 查询历史统计 */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  {t('settings.query_history')}
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={4}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('settings.history_count')}
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {storageStats?.count || 0} 条
+                    </Typography>
+                  </Grid>
+                  {storageStats?.lastSaved && (
+                    <Grid item xs={6} sm={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('settings.last_query_time')}
+                      </Typography>
+                      <Typography variant="body1" fontWeight="bold">
+                        {formatLocalTime(storageStats.lastSaved, 'display')}
+                      </Typography>
+                    </Grid>
+                  )}
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('settings.storage_size')}
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      ~{Math.ceil((JSON.stringify(queryState.history).length / 1024) * 100) / 100} KB
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              {/* 数据操作 */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  {t('settings.data_actions')}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    size="small"
+                    onClick={handleClearQueryHistory}
+                    disabled={queryState.history.length === 0}
+                  >
+                    {t('settings.clear_history')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="info"
+                    size="small"
+                    onClick={handleDataCleanup}
+                  >
+                    清理过期数据
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    onClick={handleClearAllData}
+                  >
+                    {t('settings.clear_all_data')}
+                  </Button>
+                </Box>
+              </Box>
+
+              {queryState.history.length > 0 && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  查询历史包含 {queryState.history.length} 条记录，软件重启后仍会保留。点击"清空历史"可删除所有记录。
                 </Alert>
               )}
             </CardContent>
@@ -329,7 +501,7 @@ const SettingsPage: React.FC = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                  应用更新
+                  {t('settings_labels.app_update')}
                 </Typography>
                 <Button
                   variant="outlined"
@@ -337,24 +509,24 @@ const SettingsPage: React.FC = () => {
                   startIcon={<UpdateIcon />}
                   onClick={handleCheckUpdate}
                 >
-                  版本信息
+                  {t('settings_labels.version_info')}
                 </Button>
               </Box>
 
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="subtitle2">
-                  当前版本: {appVersion}
+                  {t('settings_labels.current_version')}: {appVersion}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1 }}>
-                  独立运行版本，无需联网更新。所有功能完整可用。
+                  {t('settings_labels.standalone_version_description')}
                 </Typography>
               </Alert>
 
               <List dense>
                 <ListItem>
                   <ListItemText
-                    primary="自动更新"
-                    secondary="独立版本已禁用（无需联网）"
+                    primary={t('settings_labels.auto_update')}
+                    secondary={t('settings_labels.auto_update_disabled')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -366,8 +538,8 @@ const SettingsPage: React.FC = () => {
                 </ListItem>
                 <ListItem>
                   <ListItemText
-                    primary="更新通知"
-                    secondary="独立版本已禁用（无需联网）"
+                    primary={t('settings_labels.update_notifications')}
+                    secondary={t('settings_labels.update_notifications_disabled')}
                   />
                   <ListItemSecondaryAction>
                     <Switch

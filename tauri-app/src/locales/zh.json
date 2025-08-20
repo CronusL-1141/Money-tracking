@@ -33,10 +33,12 @@
     "filter": "筛选",
     "sort": "排序",
     "refresh": "刷新",
+    "reload": "重新加载", 
     "reset": "重置",
     "clear": "清空",
     "select_all": "全选",
-    "deselect_all": "取消全选"
+    "deselect_all": "取消全选",
+    "actions": "操作"
   },
   
   "app": {
@@ -49,15 +51,13 @@
     "home": "主页",
     "analysis": "资金分析",
     "query": "时点查询",
-    "test": "功能测试",
-    "settings": "设置",
-    "help": "帮助"
+    "settings": "设置"
   },
   
   "analysis": {
     "title": "资金分析",
     "algorithm": "算法",
-    "fifo": "FIFO先进先出",
+    "fifo": "FIFO计算法",
     "balance_method": "差额计算法",
     "input_file": "输入文件",
     "output_file": "输出文件",
@@ -69,7 +69,8 @@
     "export_results": "导出结果",
     "algorithm_description": {
       "fifo": "使用先进先出原则追踪资金流向，精确计算每笔交易的资金来源",
-      "balance_method": "基于余额优先原则，个人支出优先使用个人资金，不足部分计为挪用"
+      "balance_method": "基于余额优先原则，个人支出优先使用个人资金，不足部分计为挪用",
+      "overview": "可自选FIFO和差额两种算法追踪资金流向，满足不同审计需求的专业分析"
     }
   },
   
@@ -79,6 +80,7 @@
     "file_path": "文件路径",
     "query_button": "执行查询",
     "query_result": "查询结果",
+    "query_description": "精确查询指定时间点的资金状态，包括余额分布、挪用情况、利润分配等详细信息",
     "query_history": "查询历史",
     "save_result": "保存结果",
     "clear_history": "清空历史",
@@ -107,7 +109,15 @@
     "max_history_records": "最大历史记录数",
     "python_environment": "Python环境",
     "check_environment": "检查环境",
-    "environment_status": "环境状态"
+    "environment_status": "环境状态",
+    "data_management": "数据管理",
+    "query_history": "查询历史",
+    "clear_history": "清空历史",
+    "clear_all_data": "清空所有数据",
+    "history_count": "历史记录数量",
+    "last_query_time": "最后查询时间",
+    "storage_size": "存储大小",
+    "data_actions": "数据操作"
   },
   
   "results": {
@@ -121,7 +131,6 @@
     "total_balance": "总余额",
     "misappropriation": "挪用情况",
     "cumulative_misappropriation": "累计挪用",
-    "net_misappropriation": "净挪用",
     "returned_principal": "已归还本金",
     "advance_payment": "垫付情况",
     "cumulative_advance": "累计垫付",
@@ -131,6 +140,11 @@
     "output_files": "输出文件"
   },
   
+  "error": {
+    "page_load_error": "页面加载出现问题",
+    "page_render_error": "页面渲染时发生了意外错误。这可能是临时问题，请尝试刷新页面。"
+  },
+
   "errors": {
     "system_error": "系统错误",
     "initialization_failed": "系统初始化失败",
@@ -154,6 +168,60 @@
     "operation_completed": "操作完成"
   },
   
+  "notifications": {
+    "success": {
+      "file_drag_success": "文件拖拽成功",
+      "file_selected": "已选择文件: {filename}",
+      "file_selection": "文件选择",
+      "query_success": "查询成功",
+      "query_completed": "第{row}行数据查询完成",
+      "save_success": "保存成功", 
+      "save_completed": "查询结果已保存为JSON文件",
+      "copy_success": "复制成功",
+      "copy_completed": "已复制{count}行日志到剪贴板",
+      "operation_completed": "操作完成",
+      "analysis_success": "分析完成",
+      "analysis_completed": "资金追踪分析已完成，请查看结果",
+      "settings_saved": "设置已成功保存并应用",
+      "analysis_stopped": "分析已停止"
+    },
+    "errors": {
+      "file_format_unsupported": "文件格式不支持",
+      "please_select_excel": "请选择Excel文件(.xlsx或.xls)",
+      "file_selection_failed": "文件选择失败",
+      "missing_parameters": "参数缺失",
+      "select_file_and_row": "请选择文件并输入行号",
+      "invalid_row_number": "行号无效",
+      "enter_valid_row": "请输入有效的行号（大于0的整数）",
+      "query_failed": "查询失败",
+      "query_error": "查询过程中发生错误",
+      "query_exception": "查询异常",
+      "query_execution_error": "查询执行异常: {error}",
+      "save_failed": "保存失败",
+      "save_error": "保存过程中发生错误: {error}",
+      "copy_failed": "复制失败",
+      "clipboard_access_denied": "无法访问剪贴板",
+      "analysis_failed": "分析失败",
+      "select_file_first": "请选择文件",
+      "select_excel_first": "请先选择要分析的Excel文件",
+      "environment_check_failed": "环境检查失败",
+      "settings_save_failed": "保存设置失败",
+      "file_operation_failed": "文件操作失败",
+      "analysis_execution_failed": "分析执行失败",
+      "environment_check_error": "环境检查出现错误",
+      "settings_operation_failed": "设置操作失败",
+      "stop_failed": "停止失败",
+      "no_running_analysis": "当前没有正在运行的分析任务"
+    },
+    "info": {
+      "drag_drop_hint": "文件拖拽提示",
+      "drag_drop_message": "请直接拖拽文件到应用窗口，或点击浏览按钮选择文件",
+      "independent_version": "独立版本",
+      "no_update_needed": "当前为独立运行版本，无需联网更新功能",
+      "ui_stopped": "UI已停止更新，Python进程可能仍在后台运行"
+    }
+  },
+  
   "warnings": {
     "unsaved_changes": "有未保存的更改，确定要离开吗？",
     "large_file_warning": "文件较大，处理可能需要一些时间",
@@ -167,11 +235,145 @@
     "search_placeholder": "搜索...",
     "no_data": "暂无数据",
     "no_results": "无查询结果",
-    "loading_data": "正在加载数据..."
+    "loading_data": "正在加载数据...",
+    "cleanup_completed": "清理完成"
   },
   
   "file_types": {
     "excel_files": "Excel 文件",
     "all_files": "所有文件"
+  },
+  
+  "audit": {
+    "algorithm": "算法",
+    "fifo": "FIFO计算法",
+    "balance_method": "差额计算法"
+  },
+  
+  "ui": {
+    "panels": {
+      "query_config": "查询配置",
+      "analysis_config": "分析配置",
+      "query_results": "查询结果",
+      "query_log": "查询日志",
+      "query_history": "查询历史",
+      "analysis_log": "分析日志",
+      "tracker_status": "追踪器状态",
+      "processing_stats": "处理统计",
+      "transaction_data": "交易数据"
+    },
+    "buttons": {
+      "browse_file": "浏览文件",
+      "change_file": "更换文件",
+      "click_to_change": "点击更换文件",
+                  "copy_log": "复制日志",
+            "copy_all": "复制全部",
+      "view_details": "查看详情"
+    },
+    "dragdrop": {
+      "drag_excel_here": "拖拽Excel文件到此处",
+      "release_to_select": "松开鼠标选择文件",
+      "release_to_select_audit": "松开鼠标以选择文件",
+      "supported_formats": "支持 .xlsx 和 .xls 格式",
+      "click_to_change": "点击更换文件"
+    },
+    "status": {
+      "ready_to_analyze": "准备就绪，点击开始分析",
+      "select_file_first": "请先选择输入文件",
+      "query_log_placeholder": "🔍 时点查询日志将实时显示在此处...",
+      "analysis_log_placeholder": "🔍 Python分析日志将实时显示在此处...",
+      "text_selection_hint": "支持文本选择和复制粘贴"
+    },
+    "labels": {
+      "result": "结果",
+      "output_files": "输出文件",
+      "time": "用时"
+    }
+  },
+  
+  "table": {
+    "headers": {
+      "row_number": "行号",
+      "timestamp": "时间戳",
+      "income_amount": "收入金额",
+      "expense_amount": "支出金额",
+      "balance": "余额",
+      "fund_attr": "资金属性",
+      "flow_type": "流向",
+      "behavior": "行为性质",
+      "algorithm": "算法",
+      "file": "文件",
+      "total_rows": "总行数",
+      "processed_rows": "已处理行数",
+      "processing_steps": "处理步骤数",
+      "error_count": "错误数量",
+      "personal_balance": "个人资金余额",
+      "company_balance": "公司余额",
+      "total_balance": "总余额",
+      "cumulative_misappropriation": "累计挪用",
+      "funding_gap": "资金缺口"
+    },
+    "data": {
+      "transaction_data_row": "交易数据 (第{row}行)",
+      "transaction_data_prefix": "交易数据",
+      "row": "行",
+      "query_success_with_time": "查询成功完成 - 算法: {algorithm} | 用时: {time}s",
+      "query_success_completed": "查询成功完成"
+    }
+  },
+  
+  "homepage": {
+    "algorithm_intro": "系统支持两种核心算法，您可以根据审计需求选择合适的分析方法",
+    "system_features": "系统特性",
+    "features": {
+      "data_capacity": {
+        "value": "5000万",
+        "description": "最大数据处理量"
+      },
+      "dual_algorithm": {
+        "value": "双算法",
+        "description": "FIFO + 差额计算"
+      },
+      "offline": {
+        "value": "安全",
+        "description": "完全本地化处理，避免数据泄露"
+      },
+      "professional": {
+        "value": "专业",
+        "description": "具有专业级别的可视化分析报告，资金池统计"
+      }
+    }
+  },
+  
+  "process_status": {
+    "initializing": "初始化分析...",
+    "preparing": "准备分析环境...",
+    "analyzing": "分析中...",
+    "completed": "分析完成",
+    "failed": "分析失败",
+    "stopped": "分析已停止"
+  },
+  
+  "settings_labels": {
+    "auto_save_description": "自动保存查询历史和分析结果",
+    "notifications_description": "显示系统通知和操作提示",
+    "max_history_help": "查询历史记录的最大保存数量 (10-1000)",
+    "project_root": "项目根目录",
+    "auto_update": "自动更新",
+    "auto_update_disabled": "独立版本已禁用（无需联网）",
+    "update_notifications": "更新通知",
+    "update_notifications_disabled": "独立版本已禁用（无需联网）",
+    "environment_status_normal": "正常",
+    "environment_status_error": "异常",
+    "python_path": "Python路径",
+    "current_version": "当前版本",
+    "standalone_version_description": "独立运行版本，无需联网更新。所有功能完整可用。",
+    "python_version": "Python版本",
+    "python_env_check": "Python环境检查",
+    "python_available": "Python {version} 可用",
+    "python_not_available": "Python环境不可用",
+    "click_check_env_hint": "点击检查环境按钮来验证Python配置",
+    "app_update": "应用更新",
+    "version_info": "版本信息"
   }
 }

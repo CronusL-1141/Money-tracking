@@ -13,6 +13,7 @@ import {
   Select,
   MenuItem,
   Table,
+  useTheme,
   TableBody,
   TableCell,
   TableContainer,
@@ -29,24 +30,43 @@ import {
   Description as FileIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import { open } from '@tauri-apps/api/dialog';
 import { listen } from '@tauri-apps/api/event';
 import { useNotification } from '../contexts/NotificationContext';
-import { RustCommands, TimePointQuery, QueryResult } from '../types/rust-commands';
+import { useAppState } from '../contexts/AppStateContext';
+import { RustCommands, TimePointQuery, QueryResult, FundPool, FundPoolQueryResult, FundPoolRecord } from '../types/rust-commands';
 import { invoke } from '@tauri-apps/api/tauri';
+import { getCurrentLocalTime, formatLocalTime, createLogMessage } from '../utils/timeUtils';
 
 const TimePointQueryPage: React.FC = () => {
   const { t } = useTranslation();
   const { showNotification } = useNotification();
-  const [filePath, setFilePath] = useState<string>('');
-  const [rowNumber, setRowNumber] = useState<string>('');
-  const [algorithm, setAlgorithm] = useState<'FIFO' | 'BALANCE_METHOD'>('FIFO');
-  const [queryResult, setQueryResult] = useState<any>(null);
-  const [isQuerying, setIsQuerying] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [queryLog, setQueryLog] = useState<string[]>([]);
+  const theme = useTheme();
+  const { 
+    queryState, 
+    updateQueryState, 
+    addQueryHistory, 
+    clearQueryHistory,
+    appendQueryLog,
+    clearQueryLog
+  } = useAppState();
+  
+  // 从全局状态解构所需的值
+  const {
+    filePath,
+    rowNumber,
+    algorithm,
+    queryResult,
+    isQuerying,
+    history,
+    isDragOver,
+    queryLog
+  } = queryState;
   const [statusInterval, setStatusInterval] = useState<NodeJS.Timeout | null>(null);
+  const [fundPoolResult, setFundPoolResult] = useState<FundPoolQueryResult | null>(null);
+  const [selectedPool, setSelectedPool] = useState<string>('');
+  const [isQueryingPool, setIsQueryingPool] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
   // 设置Tauri文件拖拽监听
@@ -63,23 +83,24 @@ const TimePointQueryPage: React.FC = () => {
             
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
-              setFilePath(filePath);
+              updateQueryState({ filePath });
+              appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
               showNotification({
                 type: 'success',
-                title: '文件拖拽成功',
-                message: `已选择文件: ${fileName}`,
+                title: t('notifications.success.file_drag_success'),
+                message: t('notifications.success.file_selected', { filename: fileName }),
               });
             } else {
               showNotification({
                 type: 'warning',
-                title: '文件格式不支持',
-                message: '请选择Excel文件(.xlsx或.xls)',
+                title: t('notifications.errors.file_format_unsupported'),
+                message: t('notifications.errors.please_select_excel'),
               });
             }
           }
         });
       } catch (error) {
-        console.error('设置文件拖拽监听器失败:', error);
+        console.error('Failed to setup file drag listener:', error);
       }
     };
 
@@ -96,11 +117,10 @@ const TimePointQueryPage: React.FC = () => {
   const fetchProcessStatus = async () => {
     try {
       const status = await invoke<any>('get_process_status');
-      if (status.output_log && status.output_log.length > 0) {
-        setQueryLog(status.output_log);
-      }
+      // 时点查询不需要获取后端分析日志，使用独立的查询日志系统
+      console.log('Query process status:', status);
     } catch (error) {
-      console.error('获取处理状态失败:', error);
+      console.error('Failed to get processing status:', error);
     }
   };
 
@@ -108,28 +128,30 @@ const TimePointQueryPage: React.FC = () => {
   const handleSelectFile = async () => {
     try {
       const selected = await open({
-        title: '选择Excel文件',
+        title: t('notifications.success.file_selection'),
         multiple: false,
         filters: [{
-          name: 'Excel文件',
+          name: t('file_types.excel_files'),
           extensions: ['xlsx', 'xls']
         }]
       });
 
       if (selected && typeof selected === 'string') {
-        setFilePath(selected);
+        const fileName = selected.split(/[/\\]/).pop() || '';
+        updateQueryState({ filePath: selected });
+        appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
         showNotification({
           type: 'success',
-          title: '文件选择',
-          message: `已选择文件: ${selected.split(/[/\\]/).pop()}`,
+          title: t('notifications.success.file_selection'),
+          message: t('notifications.success.file_selected', { filename: fileName }),
         });
       }
     } catch (error) {
-      console.error('文件选择失败:', error);
+      console.error('File selection failed:', error);
       showNotification({
         type: 'error',
-        title: '文件选择失败',
-        message: String(error),
+        title: t('notifications.errors.file_selection_failed'),
+        message: t('notifications.errors.file_operation_failed'),
       });
     }
   };
@@ -138,26 +160,26 @@ const TimePointQueryPage: React.FC = () => {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
+    updateQueryState({ isDragOver: true });
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    updateQueryState({ isDragOver: false });
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    updateQueryState({ isDragOver: false });
 
     // 在Tauri应用中，文件拖拽主要通过Tauri的API处理
     // HTML5 File API在桌面应用中无法提供完整文件路径
     showNotification({
       type: 'info',
-      title: '文件拖拽提示',
-      message: '请直接拖拽文件到应用窗口，或点击浏览按钮选择文件',
+      title: t('notifications.info.drag_drop_hint'),
+      message: t('notifications.info.drag_drop_message'),
     });
   }, [showNotification]);
 
@@ -165,8 +187,8 @@ const TimePointQueryPage: React.FC = () => {
     if (!filePath || !rowNumber) {
       showNotification({
         type: 'warning',
-        title: '参数缺失',
-        message: '请选择文件并输入行号',
+        title: t('notifications.errors.missing_parameters'),
+        message: t('notifications.errors.select_file_and_row'),
       });
       return;
     }
@@ -175,20 +197,23 @@ const TimePointQueryPage: React.FC = () => {
     if (isNaN(rowNum) || rowNum <= 0) {
       showNotification({
         type: 'warning',
-        title: '行号无效',
-        message: '请输入有效的行号（大于0的整数）',
+        title: t('notifications.errors.invalid_row_number'),
+        message: t('notifications.errors.enter_valid_row'),
       });
       return;
     }
 
-    setIsQuerying(true);
+    updateQueryState({ isQuerying: true });
+    
+    // 添加查询开始日志
+    appendQueryLog(createLogMessage(`开始查询第${rowNum}行数据，算法：${algorithm === 'FIFO' ? 'FIFO计算法' : '差额计算法'}`, 'info'));
     
     // 启动状态轮询
-    const interval = setInterval(fetchProcessStatus, 1000);
+    const interval = setInterval(fetchProcessStatus, 200);
     setStatusInterval(interval);
     
     try {
-      console.log('执行时点查询', { filePath, rowNumber: rowNum, algorithm });
+      console.log('Executing time point query', { filePath, rowNumber: rowNum, algorithm });
       
       // 构建查询参数
       const queryParams: TimePointQuery = {
@@ -203,9 +228,9 @@ const TimePointQueryPage: React.FC = () => {
       if (queryResult.success && queryResult.data) {
         // 正确提取嵌套的数据结构
         const data = queryResult.data;
-        setQueryResult({
+        const newQueryResult = {
           rowNumber: rowNum,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalTime('iso'),
           rawData: queryResult.data,
           message: queryResult.message,
           
@@ -220,12 +245,23 @@ const TimePointQueryPage: React.FC = () => {
           tracker_state: data.tracker_state,
           processing_stats: data.processing_stats,
           recent_steps: data.recent_steps
-        });
+        };
+        
+        const completedMessage = (() => {
+          const i18nString = t('notifications.success.query_completed', { row: rowNum });
+          // 根据当前语言提供回退
+          const currentLang = i18n.language || 'zh';
+          const directString = currentLang === 'en' 
+            ? `Row ${rowNum} data query completed`
+            : `第${rowNum}行数据查询完成`;
+          console.log('Query completed interpolation:', { rowNum, currentLang, i18nString, directString });
+          return i18nString.includes('{') ? directString : i18nString;
+        })();
         
         showNotification({
           type: 'success',
-          title: '查询成功',
-          message: `第${rowNum}行数据查询完成`,
+          title: t('notifications.success.query_success'),
+          message: completedMessage,
         });
         
         // 添加到历史记录
@@ -237,27 +273,35 @@ const TimePointQueryPage: React.FC = () => {
           algorithm,
           result: queryResult.data  // 保持原始数据结构
         };
-        setHistory(prev => [historyItem, ...prev.slice(0, 99)]); // 保持最多100条
+        addQueryHistory(historyItem);
+        updateQueryState({ queryResult: newQueryResult });
+        
+        // 添加查询成功日志
+        const processingTime = data.processing_time ? data.processing_time.toFixed(3) : '0.000';
+        appendQueryLog(createLogMessage(`查询成功 - 处理时间：${processingTime}秒`, 'success'));
+        appendQueryLog(createLogMessage(`获取到第${rowNum}行数据，总行数：${data.total_rows}`, 'info'));
       } else {
         // 查询失败
-        setQueryResult(null);
+        updateQueryState({ queryResult: null });
+        appendQueryLog(createLogMessage(`查询失败：${queryResult.message || '未知错误'}`, 'error'));
         showNotification({
           type: 'error',
-          title: '查询失败',
-          message: queryResult.message || '查询过程中发生错误',
+          title: t('notifications.errors.query_failed'),
+          message: queryResult.message || t('notifications.errors.query_error'),
         });
       }
       
     } catch (error) {
-      console.error('查询失败:', error);
-      setQueryResult(null);
+      console.error('Query failed:', error);
+      updateQueryState({ queryResult: null });
+      appendQueryLog(createLogMessage(`查询异常：${error}`, 'error'));
       showNotification({
         type: 'error',
-        title: '查询异常',
-        message: `查询执行异常: ${error}`,
+        title: t('notifications.errors.query_exception'),
+        message: t('notifications.errors.query_execution_error', { error }),
       });
     } finally {
-      setIsQuerying(false);
+      updateQueryState({ isQuerying: false });
       
       // 停止状态轮询
       if (statusInterval) {
@@ -294,7 +338,7 @@ const TimePointQueryPage: React.FC = () => {
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `time_point_query_row_${queryResult.target_row}_${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `time_point_query_row_${queryResult.target_row}_${getCurrentLocalTime('filename')}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -302,21 +346,52 @@ const TimePointQueryPage: React.FC = () => {
 
       showNotification({
         type: 'success',
-        title: '保存成功',
-        message: '查询结果已保存为JSON文件',
+        title: t('notifications.success.save_success'),
+        message: t('notifications.success.save_completed'),
       });
     } catch (error) {
-      console.error('保存失败:', error);
+      console.error('Save failed:', error);
       showNotification({
         type: 'error',
-        title: '保存失败',
-        message: `保存过程中发生错误: ${error}`,
+        title: t('notifications.errors.save_failed'),
+        message: t('notifications.errors.save_error', { error }),
       });
     }
   };
 
   const handleClearHistory = () => {
-    setHistory([]);
+    clearQueryHistory();
+    clearQueryLog();
+    appendQueryLog(createLogMessage('查询历史和日志已清空', 'info'));
+  };
+
+  // 资金池查询处理函数
+  const handleFundPoolQuery = async () => {
+    if (!selectedPool || !filePath || !rowNumber || isQueryingPool) return;
+    
+    setIsQueryingPool(true);
+    try {
+      const result = await RustCommands.queryFundPool(
+        selectedPool,
+        filePath,
+        parseInt(rowNumber),
+        algorithm
+      );
+      
+      setFundPoolResult(result);
+      
+      if (result.success) {
+        appendQueryLog(createLogMessage(`资金池查询成功：${selectedPool}`, 'success'));
+        appendQueryLog(createLogMessage(`找到 ${result.summary?.record_count || 0} 条交易记录`, 'info'));
+      } else {
+        appendQueryLog(createLogMessage(`资金池查询失败：${result.message || '未知错误'}`, 'error'));
+      }
+    } catch (error) {
+      appendQueryLog(createLogMessage(`资金池查询异常：${error}`, 'error'));
+      console.error('Fund pool query failed:', error);
+    } finally {
+      setIsQueryingPool(false);
+    }
   };
 
   return (
@@ -331,7 +406,7 @@ const TimePointQueryPage: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                查询配置
+                {t('ui.panels.query_config')}
               </Typography>
               
               {/* 文件拖拽区域 */}
@@ -343,15 +418,17 @@ const TimePointQueryPage: React.FC = () => {
                 sx={{
                   p: 2,
                   mb: 2,
-                  border: isDragOver ? '2px dashed #1976d2' : '2px dashed #ddd',
-                  backgroundColor: isDragOver ? '#f3f9ff' : '#fafafa',
+                  border: isDragOver ? `2px dashed ${theme.palette.primary.main}` : `2px dashed ${theme.palette.divider}`,
+                  backgroundColor: isDragOver 
+                    ? theme.palette.mode === 'dark' ? 'rgba(144, 202, 249, 0.08)' : 'rgba(25, 118, 210, 0.08)'
+                    : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
                   borderRadius: 2,
                   textAlign: 'center',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   '&:hover': {
-                    borderColor: '#1976d2',
-                    backgroundColor: '#f9f9f9',
+                    borderColor: theme.palette.primary.main,
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                   }
                 }}
                 onClick={handleSelectFile}
@@ -361,7 +438,7 @@ const TimePointQueryPage: React.FC = () => {
                   <UploadIcon 
                     sx={{ 
                       fontSize: 32, 
-                      color: isDragOver ? '#1976d2' : '#666',
+                      color: isDragOver ? theme.palette.primary.main : theme.palette.text.secondary,
                       mb: 0.5 
                     }} 
                   />
@@ -372,11 +449,11 @@ const TimePointQueryPage: React.FC = () => {
                         {filePath.split(/[/\\]/).pop()}
                       </Box>
                     ) : (
-                      isDragOver ? '松开鼠标选择文件' : '拖拽Excel文件到此处'
+                      isDragOver ? t('ui.dragdrop.release_to_select') : t('ui.dragdrop.drag_excel_here')
                     )}
                   </Typography>
                   <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
-                    {filePath ? '点击更换文件' : '支持 .xlsx 和 .xls 格式'}
+                    {filePath ? t('ui.dragdrop.click_to_change') : t('ui.dragdrop.supported_formats')}
                   </Typography>
                   <Button
                     variant={filePath ? "outlined" : "contained"}
@@ -388,7 +465,7 @@ const TimePointQueryPage: React.FC = () => {
                       handleSelectFile();
                     }}
                   >
-                    {filePath ? '更换文件' : '浏览文件'}
+                    {filePath ? t('ui.buttons.change_file') : t('ui.buttons.browse_file')}
                   </Button>
                 </Box>
               </Paper>
@@ -397,7 +474,7 @@ const TimePointQueryPage: React.FC = () => {
                 fullWidth
                 label={t('query.target_row')}
                 value={rowNumber}
-                onChange={(e) => setRowNumber(e.target.value)}
+                onChange={(e) => updateQueryState({ rowNumber: e.target.value })}
                 type="number"
                 placeholder={t('placeholders.enter_row_number')}
                 disabled={isQuerying}
@@ -412,7 +489,7 @@ const TimePointQueryPage: React.FC = () => {
                   labelId="algorithm-select-label"
                   value={algorithm}
                   label={t('audit.algorithm')}
-                  onChange={(e) => setAlgorithm(e.target.value as 'FIFO' | 'BALANCE_METHOD')}
+                  onChange={(e) => updateQueryState({ algorithm: e.target.value as 'FIFO' | 'BALANCE_METHOD' })}
                   disabled={isQuerying}
                 >
                   <MenuItem value="FIFO">{t('audit.fifo')}</MenuItem>
@@ -456,45 +533,70 @@ const TimePointQueryPage: React.FC = () => {
               {queryResult ? (
                 <Box>
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    查询成功完成 - 算法: {queryResult.algorithm} | 用时: {queryResult.processing_time?.toFixed(3)}s
+                    {(() => {
+                      const algorithm = queryResult.algorithm || 'Unknown';
+                      const time = queryResult.processing_time?.toFixed(3) || '0.000';
+                      console.log('QueryResult for translation:', { algorithm, time });
+                      
+                      // 尝试直接字符串插值作为备选
+                      const directString = `${t('table.data.query_success_completed')} - ${t('analysis.algorithm')}: ${algorithm} | ${t('ui.labels.time')}: ${time}s`;
+                      const i18nString = t('table.data.query_success_with_time', { algorithm, time });
+                      
+                      console.log('Direct string:', directString);
+                      console.log('i18n string:', i18nString);
+                      
+                      // 如果i18n插值失败，回退到直接字符串
+                      return i18nString.includes('{') ? directString : i18nString;
+                    })()}
                   </Alert>
                   
                   <Typography variant="subtitle2" gutterBottom>
-                    交易数据 (第{queryResult.target_row}行)
+                    {(() => {
+                      const row = queryResult.target_row;
+                      console.log('Row interpolation debug:', { row });
+                      
+                      const i18nString = t('table.data.transaction_data_row', { row });
+                      const directString = `${t('table.data.transaction_data_prefix')} (${t('table.data.row')} ${row})`;
+                      
+                      console.log('Row i18n string:', i18nString);
+                      console.log('Row direct string:', directString);
+                      
+                      return i18nString.includes('{') ? directString : i18nString;
+                    })()}
                   </Typography>
                   <TableContainer component={Paper} sx={{ mb: 2 }}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>行号</TableCell>
+                          <TableCell>{t('table.headers.row_number')}</TableCell>
                           <TableCell>{queryResult.target_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>时间戳</TableCell>
+                          <TableCell>{t('table.headers.timestamp')}</TableCell>
                           <TableCell>{queryResult.target_row_data?.timestamp || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>收入金额</TableCell>
+                          <TableCell>{t('table.headers.income_amount')}</TableCell>
                           <TableCell>¥{queryResult.target_row_data?.income_amount?.toLocaleString() || '0'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>支出金额</TableCell>
+                          <TableCell>{t('table.headers.expense_amount')}</TableCell>
                           <TableCell>¥{queryResult.target_row_data?.expense_amount?.toLocaleString() || '0'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>余额</TableCell>
+                          <TableCell>{t('table.headers.balance')}</TableCell>
                           <TableCell>¥{queryResult.target_row_data?.balance?.toLocaleString() || '0'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>资金属性</TableCell>
+                          <TableCell>{t('table.headers.fund_attr')}</TableCell>
                           <TableCell>{queryResult.target_row_data?.fund_attr || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>资金流向</TableCell>
+                          <TableCell>{t('table.headers.flow_type')}</TableCell>
                           <TableCell>{queryResult.target_row_data?.flow_type || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>行为性质</TableCell>
+                          <TableCell>{t('table.headers.behavior')}</TableCell>
                           <TableCell>{queryResult.target_row_data?.behavior || '--'}</TableCell>
                         </TableRow>
                       </TableBody>
@@ -502,46 +604,34 @@ const TimePointQueryPage: React.FC = () => {
                   </TableContainer>
 
                   <Typography variant="subtitle2" gutterBottom>
-                    追踪器状态
+                    {t('ui.panels.tracker_status')}
                   </Typography>
                   <TableContainer component={Paper} sx={{ mb: 2 }}>
                     <Table size="small">
                       <TableBody>
                         {queryResult.tracker_state?.personal_balance !== undefined && (
                           <TableRow>
-                            <TableCell>个人资金余额</TableCell>
+                            <TableCell>{t('table.headers.personal_balance')}</TableCell>
                             <TableCell>¥{queryResult.tracker_state.personal_balance.toLocaleString()}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.company_balance !== undefined && (
                           <TableRow>
-                            <TableCell>公司资金余额</TableCell>
+                            <TableCell>{t('table.headers.company_balance')}</TableCell>
                             <TableCell>¥{queryResult.tracker_state.company_balance.toLocaleString()}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.total_misappropriation !== undefined && (
                           <TableRow>
-                            <TableCell>累计挪用</TableCell>
+                            <TableCell>{t('table.headers.cumulative_misappropriation')}</TableCell>
                             <TableCell>¥{queryResult.tracker_state.total_misappropriation.toLocaleString()}</TableCell>
                           </TableRow>
                         )}
-                        {queryResult.tracker_state?.personal_owed !== undefined && (
+                        {queryResult.tracker_state?.funding_gap !== undefined && (
                           <TableRow>
-                            <TableCell>个人应还</TableCell>
-                            <TableCell>¥{queryResult.tracker_state.personal_owed.toLocaleString()}</TableCell>
-                          </TableRow>
-                        )}
-                        {queryResult.tracker_state?.company_owed !== undefined && (
-                          <TableRow>
-                            <TableCell>公司应还</TableCell>
-                            <TableCell>¥{queryResult.tracker_state.company_owed.toLocaleString()}</TableCell>
-                          </TableRow>
-                        )}
-                        {queryResult.tracker_state?.net_misappropriation !== undefined && (
-                          <TableRow>
-                            <TableCell>净挪用</TableCell>
-                            <TableCell style={{color: queryResult.tracker_state.net_misappropriation >= 0 ? '#d32f2f' : '#2e7d32'}}>
-                              ¥{queryResult.tracker_state.net_misappropriation.toLocaleString()}
+                            <TableCell>{t('table.headers.funding_gap')}</TableCell>
+                            <TableCell style={{color: queryResult.tracker_state.funding_gap >= 0 ? theme.palette.error.main : theme.palette.success.main}}>
+                              ¥{queryResult.tracker_state.funding_gap.toLocaleString()}
                             </TableCell>
                           </TableRow>
                         )}
@@ -550,26 +640,26 @@ const TimePointQueryPage: React.FC = () => {
                   </TableContainer>
 
                   <Typography variant="subtitle2" gutterBottom>
-                    处理统计
+                    {t('ui.panels.processing_stats')}
                   </Typography>
                   <TableContainer component={Paper}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>总行数</TableCell>
+                          <TableCell>{t('table.headers.total_rows')}</TableCell>
                           <TableCell>{queryResult.total_rows}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>已处理行数</TableCell>
+                          <TableCell>{t('table.headers.processed_rows')}</TableCell>
                           <TableCell>{queryResult.processing_stats?.last_processed_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>处理步骤数</TableCell>
+                          <TableCell>{t('table.headers.processing_steps')}</TableCell>
                           <TableCell>{queryResult.processing_stats?.total_steps}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>错误数量</TableCell>
-                          <TableCell style={{color: queryResult.processing_stats?.error_count > 0 ? '#d32f2f' : '#2e7d32'}}>
+                          <TableCell>{t('table.headers.error_count')}</TableCell>
+                          <TableCell style={{color: queryResult.processing_stats?.error_count > 0 ? theme.palette.error.main : theme.palette.success.main}}>
                             {queryResult.processing_stats?.error_count || 0}
                           </TableCell>
                         </TableRow>
@@ -586,13 +676,111 @@ const TimePointQueryPage: React.FC = () => {
           </Card>
         </Grid>
 
+        {/* 资金池查询区域 */}
+        {queryResult?.available_fund_pools && queryResult.available_fund_pools.length > 0 && (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  资金池查询
+                </Typography>
+                
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', mb: 3 }}>
+                  <FormControl sx={{ minWidth: 200 }} size="small">
+                    <InputLabel>选择资金池</InputLabel>
+                    <Select
+                      value={selectedPool}
+                      onChange={(e) => setSelectedPool(e.target.value)}
+                      label="选择资金池"
+                    >
+                      {queryResult.available_fund_pools.map((pool: FundPool) => (
+                        <MenuItem key={pool.name} value={pool.name}>
+                          {pool.name} (¥{pool.total_amount.toLocaleString()})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  
+                  <Button
+                    variant="contained"
+                    onClick={handleFundPoolQuery}
+                    disabled={!selectedPool || isQueryingPool}
+                    startIcon={<SearchIcon />}
+                    sx={{ minWidth: 120 }}
+                  >
+                    {isQueryingPool ? '查询中...' : '查询详情'}
+                  </Button>
+                </Box>
+                
+                {/* 资金池详情表格 */}
+                {fundPoolResult?.success && fundPoolResult.records && (
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      {fundPoolResult.pool_name} - 详细交易记录
+                    </Typography>
+                    <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>交易时间</TableCell>
+                            <TableCell>入金</TableCell>
+                            <TableCell>出金</TableCell>
+                            <TableCell>总余额</TableCell>
+                            <TableCell>单笔资金占比</TableCell>
+                            <TableCell>总资金占比</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {fundPoolResult.records.map((record, index) => (
+                            <TableRow key={index} sx={{
+                              '&:last-child': {
+                                backgroundColor: theme.palette.action.hover,
+                                fontWeight: 'bold'
+                              }
+                            }}>
+                              <TableCell>{record.交易时间}</TableCell>
+                              <TableCell>
+                                {typeof record.入金 === 'number' 
+                                  ? `¥${record.入金.toLocaleString()}` 
+                                  : record.入金}
+                              </TableCell>
+                              <TableCell>
+                                {typeof record.出金 === 'number' 
+                                  ? `¥${record.出金.toLocaleString()}` 
+                                  : record.出金}
+                              </TableCell>
+                              <TableCell>
+                                {typeof record.总余额 === 'number' 
+                                  ? `¥${record.总余额.toLocaleString()}` 
+                                  : record.总余额}
+                              </TableCell>
+                              <TableCell>{record.单笔资金占比}</TableCell>
+                              <TableCell>{record.总资金占比}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )}
+                
+                {fundPoolResult && !fundPoolResult.success && (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {fundPoolResult.message || '资金池查询失败'}
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
         {/* 查询日志 */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                  查询日志
+                  {t('ui.panels.query_log')}
                 </Typography>
                 {queryLog.length > 0 && (
                   <Button
@@ -603,21 +791,21 @@ const TimePointQueryPage: React.FC = () => {
                       navigator.clipboard.writeText(logText).then(() => {
                         showNotification({
                           type: 'success',
-                          title: '复制成功',
-                          message: `已复制${queryLog.length}行日志到剪贴板`,
+                          title: t('notifications.success.copy_success'),
+                          message: t('notifications.success.copy_completed', { count: queryLog.length }),
                         });
                       }).catch(err => {
-                        console.error('复制失败:', err);
+                        console.error('Copy failed:', err);
                         showNotification({
                           type: 'error',
-                          title: '复制失败',
-                          message: '无法访问剪贴板',
+                          title: t('notifications.errors.copy_failed'),
+                          message: t('notifications.errors.clipboard_access_denied'),
                         });
                       });
                     }}
                     sx={{ fontSize: '0.75rem', minWidth: 'auto', px: 1.5 }}
                   >
-                    📋 复制全部
+                    {t('ui.buttons.copy_log')}
                   </Button>
                 )}
               </Box>
@@ -627,13 +815,13 @@ const TimePointQueryPage: React.FC = () => {
                   p: 2,
                   maxHeight: 300,
                   overflow: 'auto',
-                  backgroundColor: '#f8f9fa',
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#f8f9fa',
                   fontFamily: 'Consolas, "Courier New", monospace',
                   fontSize: '0.8rem',
                   lineHeight: 1.4,
                   userSelect: 'text',
                   cursor: 'text',
-                  border: '1px solid #e0e0e0',
+                  border: `1px solid ${theme.palette.divider}`,
                   borderRadius: 1,
                   '& *': {
                     userSelect: 'text',
@@ -642,14 +830,14 @@ const TimePointQueryPage: React.FC = () => {
                     width: '8px',
                   },
                   '&::-webkit-scrollbar-track': {
-                    backgroundColor: '#f1f1f1',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : '#f1f1f1',
                   },
                   '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: '#c1c1c1',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : '#c1c1c1',
                     borderRadius: '4px',
                   },
                   '&::-webkit-scrollbar-thumb:hover': {
-                    backgroundColor: '#a8a8a8',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : '#a8a8a8',
                   },
                 }}
                 variant="outlined"
@@ -663,12 +851,12 @@ const TimePointQueryPage: React.FC = () => {
                           mb: 0.3,
                           padding: '2px 4px',
                           borderRadius: '2px',
-                          backgroundColor: log.includes('ERROR') || log.includes('错误') || log.includes('失败') ? 'rgba(244, 67, 54, 0.1)' : 
-                                          log.includes('WARNING') || log.includes('警告') ? 'rgba(255, 152, 0, 0.1)' :
-                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-                          color: log.includes('ERROR') || log.includes('错误') || log.includes('失败') ? '#d32f2f' : 
-                                 log.includes('WARNING') || log.includes('警告') ? '#f57c00' :
-                                 log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') ? '#388e3c' : '#333',
+                          backgroundColor: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? `${theme.palette.error.main}20` : 
+                                          log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? `${theme.palette.warning.main}20` :
+                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? `${theme.palette.success.main}20` : 'transparent',
+                          color: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? theme.palette.error.main : 
+                                 log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? theme.palette.warning.main :
+                                 log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? theme.palette.success.main : theme.palette.text.primary,
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-all',
                         }}
@@ -689,9 +877,9 @@ const TimePointQueryPage: React.FC = () => {
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    🔍 时点查询日志将实时显示在此处...
+                    {t('ui.status.query_log_placeholder')}
                     <br />
-                    <small>支持文本选择和复制粘贴</small>
+                    <small>{t('ui.status.text_selection_hint')}</small>
                   </Typography>
                 )}
               </Paper>
@@ -724,18 +912,18 @@ const TimePointQueryPage: React.FC = () => {
                   <Table>
                     <TableHead>
                       <TableRow>
-                        <TableCell>时间</TableCell>
-                        <TableCell>文件</TableCell>
-                        <TableCell>行号</TableCell>
-                        <TableCell>算法</TableCell>
-                        <TableCell>操作</TableCell>
+                        <TableCell>{t('table.headers.timestamp')}</TableCell>
+                        <TableCell>{t('table.headers.file')}</TableCell>
+                        <TableCell>{t('table.headers.row_number')}</TableCell>
+                        <TableCell>{t('table.headers.algorithm')}</TableCell>
+                        <TableCell>{t('common.actions')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {history.slice(0, 10).map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>
-                            {new Date(item.timestamp).toLocaleString()}
+                            {formatLocalTime(item.timestamp, 'display')}
                           </TableCell>
                           <TableCell>{item.fileName}</TableCell>
                           <TableCell>{item.rowNumber}</TableCell>
@@ -743,9 +931,9 @@ const TimePointQueryPage: React.FC = () => {
                           <TableCell>
                             <Button 
                               size="small" 
-                              onClick={() => setQueryResult(item.result)}
+                              onClick={() => updateQueryState({ queryResult: item.result })}
                             >
-                              查看
+                              {t('ui.buttons.view_details')}
                             </Button>
                           </TableCell>
                         </TableRow>

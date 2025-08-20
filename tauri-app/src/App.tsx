@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
-import { Box, CircularProgress, Alert } from "@mui/material";
+import { Box, CircularProgress, Alert, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 // 组件导入
@@ -10,6 +10,7 @@ import HomePage from "./pages/HomePage";
 import AuditPage from "./pages/AuditPage";
 import TimePointQueryPage from "./pages/TimePointQueryPage";
 import SettingsPage from "./pages/SettingsPage";
+import AppStateProvider from "./contexts/AppStateContext";
 // import TestPage from "./pages/TestPage";
 
 // 服务和类型导入
@@ -18,6 +19,7 @@ import { PythonEnvStatus } from "./types/python";
 
 const App: React.FC = () => {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [envStatus, setEnvStatus] = useState<PythonEnvStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ const App: React.FC = () => {
         }
         
       } catch (err) {
-        console.error('初始化失败:', err);
+        console.error('Initialization failed:', err);
         setError(t('errors.initialization_failed'));
       } finally {
         setLoading(false);
@@ -47,6 +49,24 @@ const App: React.FC = () => {
 
     initializeApp();
   }, [t]);
+
+  // 根据主题模式设置HTML根元素的类名
+  useEffect(() => {
+    const htmlElement = document.documentElement;
+    const bodyElement = document.body;
+    
+    if (theme.palette.mode === 'dark') {
+      htmlElement.classList.add('dark');
+      bodyElement.classList.add('dark');
+      // 设置动态背景色
+      bodyElement.style.backgroundColor = theme.palette.background.default;
+    } else {
+      htmlElement.classList.remove('dark');
+      bodyElement.classList.remove('dark');
+      // 设置动态背景色
+      bodyElement.style.backgroundColor = theme.palette.background.default;
+    }
+  }, [theme.palette.mode, theme.palette.background.default]);
 
   // 加载中状态
   if (loading) {
@@ -86,8 +106,8 @@ const App: React.FC = () => {
           </Box>
           {envStatus && (
             <Box sx={{ mt: 2, fontSize: '0.8rem', color: 'text.secondary' }}>
-              Python路径: {envStatus.python_path?.toString() || 'N/A'}<br/>
-              项目根目录: {envStatus.project_root?.toString() || 'N/A'}
+              {t('settings_labels.python_path')}: {envStatus.python_path?.toString() || 'N/A'}<br/>
+              {t('settings_labels.project_root')}: {envStatus.project_root?.toString() || 'N/A'}
             </Box>
           )}
         </Alert>
@@ -97,7 +117,8 @@ const App: React.FC = () => {
 
   // 正常应用界面
   return (
-    <Layout>
+    <AppStateProvider>
+      <Layout>
       <Routes>
         {/* 主页 */}
         <Route path="/" element={
@@ -138,6 +159,7 @@ const App: React.FC = () => {
         } />
       </Routes>
     </Layout>
+    </AppStateProvider>
   );
 };
 

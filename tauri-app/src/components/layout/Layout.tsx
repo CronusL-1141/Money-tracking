@@ -73,7 +73,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const drawer = (
     <Box>
       <Toolbar>
-        <Typography variant="h6" noWrap component="div">
+        <Typography 
+          variant="h6" 
+          component="div"
+          sx={{ 
+            whiteSpace: 'normal',
+            lineHeight: 1.2,
+            fontSize: { xs: '0.9rem', sm: '1.1rem' },
+            fontWeight: 500
+          }}
+        >
           {t('app.title')}
         </Typography>
       </Toolbar>
@@ -145,7 +154,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      backgroundColor: theme.palette.background.default,
+      minHeight: '100vh',
+      width: '100vw'
+    }}>
       <AppBar
         position="fixed"
         sx={{

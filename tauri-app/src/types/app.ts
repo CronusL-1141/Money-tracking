@@ -60,9 +60,9 @@ export interface AuditSummary {
   };
   misappropriation: {
     cumulative: number;
-    net: number;
     returned: number;
   };
+  funding_gap: number;
   advance: {
     cumulative: number;
   };
@@ -91,5 +91,6 @@ export interface TimePointResult {
     misappropriation: number;
     advance: number;
     returnedPrincipal: number;
+    funding_gap: number;
   };
 }

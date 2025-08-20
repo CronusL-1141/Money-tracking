@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createTheme, ThemeProvider, Theme } from '@mui/material/styles';
+import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeMode } from '../types/app';
 
 interface ThemeContextType {
@@ -175,13 +176,17 @@ export const ThemeContextProvider: React.FC<ThemeContextProviderProps> = ({ chil
     setCurrentTheme(createAppTheme(actualTheme));
   }, [themeMode]);
 
-  // 监听系统主题变化
+  // 监听系统主题变化并同步到窗口
   useEffect(() => {
+    const actualTheme = getActualTheme(themeMode);
+    setWindowTheme(actualTheme === 'dark');
+    
     if (themeMode === 'auto') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const handleChange = () => {
         const actualTheme = getActualTheme(themeMode);
         setCurrentTheme(createAppTheme(actualTheme));
+        setWindowTheme(actualTheme === 'dark');
       };
       
       mediaQuery.addEventListener('change', handleChange);
@@ -201,6 +206,15 @@ export const ThemeContextProvider: React.FC<ThemeContextProviderProps> = ({ chil
   const setThemeMode = (mode: ThemeMode) => {
     setThemeModeState(mode);
     localStorage.setItem('theme-mode', mode);
+  };
+
+  // 设置窗口主题
+  const setWindowTheme = async (isDark: boolean): Promise<void> => {
+    try {
+      await invoke('set_window_dark_mode', { darkMode: isDark });
+    } catch (error) {
+      console.error('Failed to set window theme:', error);
+    }
   };
 
   // 切换主题

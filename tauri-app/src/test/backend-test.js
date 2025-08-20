@@ -14,13 +14,13 @@ class BackendTester {
   }
 
   async runTest(testName, testFn) {
-    console.log(`🧪 正在测试: ${testName}`);
+    console.log(`🧪 Testing: ${testName}`);
     try {
       const startTime = Date.now();
       const result = await testFn();
       const duration = Date.now() - startTime;
       
-      console.log(`✅ ${testName} - 通过 (${duration}ms)`);
+      console.log(`✅ ${testName} - Passed (${duration}ms)`);
       this.testResults.push({
         name: testName,
         status: 'PASS',
@@ -30,7 +30,7 @@ class BackendTester {
       this.passCount++;
       return result;
     } catch (error) {
-      console.error(`❌ ${testName} - 失败:`, error);
+      console.error(`❌ ${testName} - Failed:`, error);
       this.testResults.push({
         name: testName,
         status: 'FAIL',
@@ -42,7 +42,7 @@ class BackendTester {
   }
 
   async runAllTests() {
-    console.log('🚀 开始Rust后端功能测试...\n');
+    console.log('🚀 Starting Rust backend functionality tests...\n');
     
     try {
       // 1. 基础环境测试
@@ -50,7 +50,7 @@ class BackendTester {
         const result = await window.__TAURI__.invoke('check_python_env');
         console.log('Python环境信息:', result);
         if (!result.python_available) {
-          throw new Error('Python环境不可用');
+          throw new Error('Python environment not available');
         }
         return result;
       });
@@ -60,10 +60,10 @@ class BackendTester {
         const algorithms = await window.__TAURI__.invoke('get_algorithms');
         console.log('可用算法:', algorithms);
         if (!Array.isArray(algorithms) || algorithms.length === 0) {
-          throw new Error('算法列表为空');
+          throw new Error('Algorithm list is empty');
         }
         if (!algorithms.includes('FIFO') || !algorithms.includes('BALANCE_METHOD')) {
-          throw new Error('缺少必要的算法');
+          throw new Error('Missing required algorithms');
         }
         return algorithms;
       });
@@ -73,7 +73,7 @@ class BackendTester {
         const config = await window.__TAURI__.invoke('get_app_config');
         console.log('应用配置:', config);
         if (!config.default_algorithm || !config.language) {
-          throw new Error('配置数据不完整');
+          throw new Error('Configuration data incomplete');
         }
         return config;
       });
@@ -90,7 +90,7 @@ class BackendTester {
         const updatedConfig = await window.__TAURI__.invoke('get_app_config');
         
         if (updatedConfig.theme !== newConfig.theme) {
-          throw new Error('配置更新失败');
+          throw new Error('Configuration update failed');
         }
         
         // 恢复原配置
@@ -103,7 +103,7 @@ class BackendTester {
         const status = await window.__TAURI__.invoke('get_process_status');
         console.log('进程状态:', status);
         if (typeof status.running !== 'boolean') {
-          throw new Error('进程状态格式错误');
+          throw new Error('Process status format error');
         }
         return status;
       });
@@ -113,7 +113,7 @@ class BackendTester {
         const history = await window.__TAURI__.invoke('get_query_history');
         console.log('查询历史记录数:', history.length);
         if (!Array.isArray(history)) {
-          throw new Error('历史记录格式错误');
+          throw new Error('History record format error');
         }
         return history;
       });
@@ -124,7 +124,7 @@ class BackendTester {
           path: '/nonexistent/file.txt' 
         });
         if (isValid) {
-          throw new Error('无效路径被错误验证为有效');
+          throw new Error('Invalid path incorrectly validated as valid');
         }
         return !isValid;
       });
@@ -136,13 +136,13 @@ class BackendTester {
         });
         console.log('文件信息:', fileInfo);
         if (fileInfo.exists) {
-          throw new Error('不存在的文件被标记为存在');
+          throw new Error('Non-existent file marked as existing');
         }
         return fileInfo;
       });
 
     } catch (error) {
-      console.error('测试过程中发生错误:', error);
+      console.error('Error occurred during testing:', error);
     }
 
     // 输出测试总结

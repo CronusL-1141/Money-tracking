@@ -30,8 +30,8 @@ export class PythonService {
     try {
       return await RustCommands.checkPythonEnv();
     } catch (error) {
-      console.error('检查Python环境失败:', error);
-      throw new Error(`无法检查Python环境: ${error}`);
+      console.error('Failed to check Python environment:', error);
+      throw new Error(`Unable to check Python environment: ${error}`);
     }
   }
   
@@ -42,8 +42,8 @@ export class PythonService {
     try {
       return await RustCommands.getAlgorithms();
     } catch (error) {
-      console.error('获取算法列表失败:', error);
-      throw new Error(`无法获取算法列表: ${error}`);
+      console.error('Failed to get algorithm list:', error);
+      throw new Error(`Unable to get algorithm list: ${error}`);
     }
   }
   
@@ -54,8 +54,8 @@ export class PythonService {
     try {
       return await RustCommands.runAudit(config);
     } catch (error) {
-      console.error('审计分析失败:', error);
-      throw new Error(`审计分析执行失败: ${error}`);
+      console.error('Audit analysis failed:', error);
+      throw new Error(`Audit analysis execution failed: ${error}`);
     }
   }
   
@@ -66,8 +66,8 @@ export class PythonService {
     try {
       return await RustCommands.timePointQuery(query);
     } catch (error) {
-      console.error('时点查询失败:', error);
-      throw new Error(`时点查询执行失败: ${error}`);
+      console.error('Time point query failed:', error);
+      throw new Error(`Time point query execution failed: ${error}`);
     }
   }
 
@@ -78,8 +78,8 @@ export class PythonService {
     try {
       return await RustCommands.getQueryHistory();
     } catch (error) {
-      console.error('获取查询历史失败:', error);
-      throw new Error(`无法获取查询历史: ${error}`);
+      console.error('Failed to get query history:', error);
+      throw new Error(`Unable to get query history: ${error}`);
     }
   }
 
@@ -90,8 +90,8 @@ export class PythonService {
     try {
       await RustCommands.clearQueryHistory();
     } catch (error) {
-      console.error('清空查询历史失败:', error);
-      throw new Error(`无法清空查询历史: ${error}`);
+      console.error('Failed to clear query history:', error);
+      throw new Error(`Unable to clear query history: ${error}`);
     }
   }
 
@@ -102,8 +102,8 @@ export class PythonService {
     try {
       return await RustCommands.deleteQueryHistoryItem(id);
     } catch (error) {
-      console.error('删除历史记录失败:', error);
-      throw new Error(`无法删除历史记录: ${error}`);
+      console.error('Failed to delete history record:', error);
+      throw new Error(`Unable to delete history record: ${error}`);
     }
   }
 
@@ -114,8 +114,8 @@ export class PythonService {
     try {
       return await RustCommands.getProcessStatus();
     } catch (error) {
-      console.error('获取进程状态失败:', error);
-      throw new Error(`无法获取进程状态: ${error}`);
+      console.error('Failed to get process status:', error);
+      throw new Error(`Unable to get process status: ${error}`);
     }
   }
 
@@ -126,8 +126,8 @@ export class PythonService {
     try {
       return await RustCommands.getAppConfig();
     } catch (error) {
-      console.error('获取应用配置失败:', error);
-      throw new Error(`无法获取应用配置: ${error}`);
+      console.error('Failed to get app config:', error);
+      throw new Error(`Unable to get app config: ${error}`);
     }
   }
 
@@ -138,8 +138,8 @@ export class PythonService {
     try {
       await RustCommands.updateAppConfig(config);
     } catch (error) {
-      console.error('更新应用配置失败:', error);
-      throw new Error(`无法更新应用配置: ${error}`);
+      console.error('Failed to update app config:', error);
+      throw new Error(`Unable to update app config: ${error}`);
     }
   }
 
@@ -150,8 +150,8 @@ export class PythonService {
     try {
       return await RustCommands.getFileInfo(path);
     } catch (error) {
-      console.error('获取文件信息失败:', error);
-      throw new Error(`无法获取文件信息: ${error}`);
+      console.error('Failed to get file info:', error);
+      throw new Error(`Unable to get file info: ${error}`);
     }
   }
 
@@ -162,8 +162,8 @@ export class PythonService {
     try {
       return await RustCommands.exportQueryResult(queryId, outputPath);
     } catch (error) {
-      console.error('导出查询结果失败:', error);
-      throw new Error(`无法导出查询结果: ${error}`);
+      console.error('Failed to export query result:', error);
+      throw new Error(`Unable to export query result: ${error}`);
     }
   }
 
@@ -174,8 +174,8 @@ export class PythonService {
     try {
       return await RustCommands.validateFilePath(path);
     } catch (error) {
-      console.error('验证文件路径失败:', error);
-      throw new Error(`无法验证文件路径: ${error}`);
+      console.error('Failed to validate file path:', error);
+      throw new Error(`Unable to validate file path: ${error}`);
     }
   }
 }

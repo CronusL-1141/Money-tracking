@@ -31,8 +31,8 @@ export class FileService {
       }
       return null;
     } catch (error) {
-      console.error('选择文件失败:', error);
-      throw new Error(`文件选择失败: ${error}`);
+      console.error('Failed to select file:', error);
+      throw new Error(`File selection failed: ${error}`);
     }
   }
   
@@ -61,8 +61,8 @@ export class FileService {
       }
       return null;
     } catch (error) {
-      console.error('选择保存位置失败:', error);
-      throw new Error(`选择保存位置失败: ${error}`);
+      console.error('Failed to select save location:', error);
+      throw new Error(`Save location selection failed: ${error}`);
     }
   }
   
@@ -81,8 +81,8 @@ export class FileService {
       
       return result as string | null;
     } catch (error) {
-      console.error('文件选择失败:', error);
-      throw new Error(`文件选择失败: ${error}`);
+      console.error('Failed to select file:', error);
+      throw new Error(`File selection failed: ${error}`);
     }
   }
   
@@ -95,7 +95,7 @@ export class FileService {
       const { exists } = await import('@tauri-apps/api/fs');
       return await exists(path);
     } catch (error) {
-      console.error('检查文件存在性失败:', error);
+      console.error('Failed to check file existence:', error);
       return false;
     }
   }
@@ -126,7 +126,7 @@ export class FileService {
         lastModified: new Date(),
       };
     } catch (error) {
-      console.error('获取文件信息失败:', error);
+      console.error('Failed to get file info:', error);
       return null;
     }
   }
@@ -162,7 +162,7 @@ export class FileService {
   static generateOutputFileName(inputPath: string, algorithm: string, suffix?: string): string {
     const inputName = inputPath.split(/[/\\]/).pop() || 'audit';
     const nameWithoutExt = inputName.replace(/\.[^/.]+$/, '');
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
     
     let outputName = `${nameWithoutExt}_${algorithm}`;
     if (suffix) {

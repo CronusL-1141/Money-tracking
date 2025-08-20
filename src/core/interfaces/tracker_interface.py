@@ -124,20 +124,26 @@ class ITracker(ABC):
         
     @property
     @abstractmethod
-    def 累计已归还公司本金(self) -> float:
-        """累计已归还公司本金"""
+    def 累计由资金池回归公司余额本金(self) -> float:
+        """累计由资金池回归公司余额本金"""
         pass
         
     @property
     @abstractmethod
-    def 总计个人分配利润(self) -> float:
-        """总计个人分配利润"""
+    def 累计由资金池回归个人余额本金(self) -> float:
+        """累计由资金池回归个人余额本金"""
         pass
         
     @property
     @abstractmethod
-    def 总计公司分配利润(self) -> float:
-        """总计公司分配利润"""
+    def 总计个人应分配利润(self) -> float:
+        """总计个人应分配利润"""
+        pass
+        
+    @property
+    @abstractmethod
+    def 总计公司应分配利润(self) -> float:
+        """总计公司应分配利润"""
         pass
         
     @property

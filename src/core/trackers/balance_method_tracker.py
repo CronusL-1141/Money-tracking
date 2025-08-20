@@ -25,10 +25,11 @@ class BalanceMethodTracker(ITracker):
         # 累计统计
         self._累计挪用金额 = 0.0
         self._累计垫付金额 = 0.0  
-        self._累计已归还公司本金 = 0.0
+        self._累计由资金池回归公司余额本金 = 0.0
+        self._累计由资金池回归个人余额本金 = 0.0
         self._累计非法所得 = 0.0
-        self._总计个人分配利润 = 0.0
-        self._总计公司分配利润 = 0.0
+        self._总计个人应分配利润 = 0.0
+        self._总计公司应分配利润 = 0.0
         
         # 场外资金池管理（简化版）
         self._投资产品资金池 = {}
@@ -220,6 +221,8 @@ class BalanceMethodTracker(ITracker):
                 '公司占比': 0,
                 '累计申购': 0,
                 '累计赎回': 0,
+                '累计个人金额': 0,
+                '累计公司金额': 0,
                 '历史盈利记录': [],  # 记录每次重置时的盈利
                 '累计已实现盈利': 0   # 所有重置盈利的累计
             }
@@ -227,6 +230,8 @@ class BalanceMethodTracker(ITracker):
         产品信息 = self._投资产品资金池[投资产品编号]
         产品信息['总金额'] += 金额
         产品信息['累计申购'] += 金额
+        产品信息['累计个人金额'] += 金额 * 个人占比
+        产品信息['累计公司金额'] += 金额 * 公司占比
         
         # 更新占比（按最新申购计算）
         if 产品信息['总金额'] > 0:
@@ -234,13 +239,23 @@ class BalanceMethodTracker(ITracker):
             产品信息['公司占比'] = 公司占比
         
         # 记录交易
+        # 计算总资金占比（基于产品信息中的累计资金）
+        总金额 = 产品信息['总金额']
+        if 总金额 != 0:
+            总个人占比 = 产品信息.get('累计个人金额', 0) / 总金额
+            总公司占比 = 产品信息.get('累计公司金额', 0) / 总金额
+        else:
+            总个人占比 = 0
+            总公司占比 = 0
+        
         交易记录 = {
             '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 金额,
             '出金': 0,
             '总余额': 产品信息['总金额'],
-            '资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
+            '单笔资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
+            '总资金占比': f"个人{总个人占比:.1%}，公司{总公司占比:.1%}",
             '行为性质': f"入金（个人{金额*个人占比:,.0f}，公司{金额*公司占比:,.0f}）",
             '累计申购': 产品信息['累计申购'],
             '累计赎回': 产品信息['累计赎回']
@@ -283,8 +298,13 @@ class BalanceMethodTracker(ITracker):
             赎回比例 = min(金额 / 申购总额, 1.0)
             归还的公司本金 = 申购总额 * 公司占比 * 赎回比例
             if 归还的公司本金 > 0:
-                self._累计已归还公司本金 += 归还的公司本金
-                self._累计已归还公司本金 = Config.format_number(self._累计已归还公司本金)
+                self._累计由资金池回归公司余额本金 += 归还的公司本金
+                self._累计由资金池回归公司余额本金 = Config.format_number(self._累计由资金池回归公司余额本金)
+                # 同时更新个人本金归还（如果有个人部分）
+                if 个人占比 > 0:
+                    归还的个人本金 = 申购总额 * 个人占比 * 赎回比例
+                    self._累计由资金池回归个人余额本金 += 归还的个人本金
+                    self._累计由资金池回归个人余额本金 = Config.format_number(self._累计由资金池回归个人余额本金)
         
         # 更新产品信息
         产品信息['总金额'] -= min(金额, 申购总额)
@@ -295,19 +315,29 @@ class BalanceMethodTracker(ITracker):
         if 收益 > 0:
             个人收益 = 收益 * 个人占比
             公司收益 = 收益 * 公司占比
-            self._总计个人分配利润 += 个人收益
-            self._总计公司分配利润 += 公司收益
-            self._总计个人分配利润 = Config.format_number(self._总计个人分配利润)
-            self._总计公司分配利润 = Config.format_number(self._总计公司分配利润)
+            self._总计个人应分配利润 += 个人收益
+            self._总计公司应分配利润 += 公司收益
+            self._总计个人应分配利润 = Config.format_number(self._总计个人应分配利润)
+            self._总计公司应分配利润 = Config.format_number(self._总计公司应分配利润)
         
         # 记录交易
+        # 计算总资金占比（基于产品信息中的累计资金）
+        总金额 = 产品信息['总金额']
+        if 总金额 != 0:
+            总个人占比 = 产品信息.get('累计个人金额', 0) / 总金额
+            总公司占比 = 产品信息.get('累计公司金额', 0) / 总金额
+        else:
+            总个人占比 = 0
+            总公司占比 = 0
+        
         交易记录 = {
             '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 0,
             '出金': 金额,
             '总余额': 产品信息['总金额'],
-            '资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
+            '单笔资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
+            '总资金占比': f"个人{总个人占比:.1%}，公司{总公司占比:.1%}",
             '行为性质': f"出金（个人{个人返还:,.0f}，公司{公司返还:,.0f}，收益{收益:,.0f}）",
             '累计申购': 产品信息['累计申购'],
             '累计赎回': 产品信息['累计赎回']
@@ -327,11 +357,12 @@ class BalanceMethodTracker(ITracker):
             '累计挪用金额': Config.format_number(self._累计挪用金额),
             '累计垫付金额': Config.format_number(self._累计垫付金额),
             '累计非法所得': Config.format_number(self._累计非法所得),
-            '累计已归还公司本金': Config.format_number(self._累计已归还公司本金),
-            '总计个人分配利润': Config.format_number(self._总计个人分配利润),
-            '总计公司分配利润': Config.format_number(self._总计公司分配利润),
+            '累计由资金池回归公司余额本金': Config.format_number(self._累计由资金池回归公司余额本金),
+            '累计由资金池回归个人余额本金': Config.format_number(self._累计由资金池回归个人余额本金),
+            '总计个人应分配利润': Config.format_number(self._总计个人应分配利润),
+            '总计公司应分配利润': Config.format_number(self._总计公司应分配利润),
             '已初始化': self._已初始化,
-            '净挪用金额': Config.format_number(self._累计挪用金额 - self._累计已归还公司本金)
+            '资金缺口': Config.format_number(self._累计挪用金额 - self._累计由资金池回归个人余额本金)
         }
     
     def 获取当前资金占比(self) -> Tuple[float, float]:
@@ -373,8 +404,8 @@ class BalanceMethodTracker(ITracker):
                         # 计算最终盈亏状态
                         final_total_balance = last_row['总余额']
                         
-                        # 从资金占比字符串中提取个人和公司比例
-                        ratio_str = last_row['资金占比']
+                        # 从总资金占比字符串中提取个人和公司比例
+                        ratio_str = last_row.get('总资金占比', last_row.get('资金占比', ''))
                         final_personal_balance = final_total_balance * 0.5  # 默认值，如果解析失败
                         final_company_balance = final_total_balance * 0.5
                         
@@ -417,7 +448,8 @@ class BalanceMethodTracker(ITracker):
                             '入金': f'总申购: ¥{total_purchase:,.0f}',
                             '出金': f'总赎回: ¥{total_redemption:,.0f}',
                             '总余额': f'最终余额: ¥{final_total_balance:,.0f}',
-                            '资金占比': f'净盈亏: ¥{profit_loss:,.0f}',
+                            '单笔资金占比': '── 汇总 ──',
+                            '总资金占比': f'净盈亏: ¥{profit_loss:,.0f}',
                             '行为性质': f'状态: {profit_status}',
                             '累计申购': total_purchase,
                             '累计赎回': total_redemption,
@@ -463,16 +495,20 @@ class BalanceMethodTracker(ITracker):
         return self._累计垫付金额
         
     @property
-    def 累计已归还公司本金(self) -> float:
-        return self._累计已归还公司本金
+    def 累计由资金池回归公司余额本金(self) -> float:
+        return self._累计由资金池回归公司余额本金
         
     @property
-    def 总计个人分配利润(self) -> float:
-        return self._总计个人分配利润
+    def 累计由资金池回归个人余额本金(self) -> float:
+        return self._累计由资金池回归个人余额本金
         
     @property
-    def 总计公司分配利润(self) -> float:
-        return self._总计公司分配利润
+    def 总计个人应分配利润(self) -> float:
+        return self._总计个人应分配利润
+        
+    @property
+    def 总计公司应分配利润(self) -> float:
+        return self._总计公司应分配利润
         
     @property
     def 已初始化(self) -> bool:

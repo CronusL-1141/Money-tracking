@@ -33,10 +33,12 @@
     "filter": "Filter",
     "sort": "Sort",
     "refresh": "Refresh",
+    "reload": "Reload",
     "reset": "Reset",
     "clear": "Clear",
     "select_all": "Select All",
-    "deselect_all": "Deselect All"
+    "deselect_all": "Deselect All",
+    "actions": "Actions"
   },
   
   "app": {
@@ -68,13 +70,21 @@
   "analysis": {
     "title": "Fund Flow Analysis",
     "algorithm": "Analysis Algorithm",
+    "fifo": "FIFO Method",
+    "balance_method": "Balance Method",
     "input_file": "Input File",
     "output_file": "Output File",
     "start_analysis": "Start Analysis",
     "progress": "Analysis Progress",
+    "analysis_progress": "Analysis Progress",
     "results": "Analysis Results",
     "download_results": "Download Results",
-    "view_details": "View Details"
+    "view_details": "View Details",
+    "algorithm_description": {
+      "fifo": "Uses First In First Out principle to track fund flows, accurately calculating the source of each transaction",
+      "balance_method": "Based on balance priority principle, personal expenses use personal funds first, shortfalls are counted as misappropriation",
+      "overview": "Choose between FIFO and Balance Method algorithms to track fund flows, meeting different professional audit requirements"
+    }
   },
   
   "algorithms": {
@@ -86,11 +96,16 @@
   
   "query": {
     "title": "Time Point Query",
+    "target_row": "Target Row",
     "file_path": "Data File Path",
     "row_number": "Row Number",
     "algorithm": "Algorithm",
     "execute_query": "Execute Query",
+    "query_button": "Execute Query",
     "query_result": "Query Result",
+    "query_description": "Precisely query fund status at specific time points, including balance distribution, misappropriation details, profit allocation and comprehensive information",
+    "query_history": "Query History",
+    "save_result": "Save Result",
     "history": "Query History",
     "clear_history": "Clear History"
   },
@@ -152,10 +167,218 @@
     "data_exported": "Data exported successfully"
   },
   
-  "error": {
+  "notifications": {
+    "success": {
+      "file_drag_success": "File drag successful",
+      "file_selected": "File selected: {filename}",
+      "file_selection": "File Selection",
+      "query_success": "Query successful",
+      "query_completed": "Row {row} data query completed",
+      "save_success": "Save successful",
+      "save_completed": "Query results saved as JSON file",
+      "copy_success": "Copy successful",
+      "copy_completed": "Copied {count} lines of log to clipboard",
+      "analysis_success": "Analysis completed",
+      "analysis_completed": "Fund tracking analysis completed, please check results",
+      "settings_saved": "Settings saved and applied successfully",
+      "analysis_stopped": "Analysis stopped"
+    },
+    "errors": {
+      "file_format_unsupported": "File format not supported",
+      "please_select_excel": "Please select Excel file (.xlsx or .xls)",
+      "file_selection_failed": "File selection failed",
+      "missing_parameters": "Missing parameters",
+      "select_file_and_row": "Please select file and enter row number",
+      "invalid_row_number": "Invalid row number",
+      "enter_valid_row": "Please enter valid row number (integer greater than 0)",
+      "query_failed": "Query failed",
+      "query_error": "Error occurred during query",
+      "query_exception": "Query exception",
+      "query_execution_error": "Query execution exception: {error}",
+      "save_failed": "Save failed",
+      "save_error": "Error occurred during save: {error}",
+      "copy_failed": "Copy failed",
+      "clipboard_access_denied": "Cannot access clipboard",
+      "analysis_failed": "Analysis failed",
+      "select_file_first": "Please select file",
+      "select_excel_first": "Please select Excel file to analyze first",
+      "environment_check_failed": "Environment check failed",
+      "settings_save_failed": "Settings save failed",
+      "file_operation_failed": "File operation failed",
+      "analysis_execution_failed": "Analysis execution failed", 
+      "environment_check_error": "Environment check error occurred",
+      "settings_operation_failed": "Settings operation failed",
+      "stop_failed": "Stop failed",
+      "no_running_analysis": "No running analysis task currently"
+    },
+    "info": {
+      "drag_drop_hint": "File drag and drop hint",
+      "drag_drop_message": "Please drag files directly to the application window, or click browse button to select files",
+      "independent_version": "Independent version",
+      "no_update_needed": "Current version runs independently, no network update needed",
+      "ui_stopped": "UI stopped updating, Python process may still be running in background"
+    }
+  },
+  
+  "errors": {
     "file_upload_failed": "File upload failed",
     "analysis_failed": "Analysis failed",
     "network_error": "Network error",
-    "unknown_error": "Unknown error occurred"
+    "unknown_error": "Unknown error occurred",
+    "python_not_available": "Python environment is not available, please check if Python is properly installed",
+    "initialization_failed": "System initialization failed",
+    "system_error": "System error"
+  },
+
+  "error": {
+    "page_load_error": "Page Load Error",
+    "page_render_error": "An unexpected error occurred during page rendering. This may be a temporary issue, please try refreshing the page."
+  },
+  
+  "audit": {
+    "algorithm": "Algorithm",
+    "fifo": "FIFO Method",
+    "balance_method": "Balance Method"
+  },
+  
+  "placeholders": {
+    "enter_row_number": "Please enter row number",
+    "no_results": "No query results",
+    "no_data": "No data available"
+  },
+  
+  "ui": {
+    "panels": {
+      "query_config": "Query Configuration",
+      "analysis_config": "Analysis Configuration", 
+      "query_results": "Query Results",
+      "query_log": "Query Log",
+      "query_history": "Query History",
+      "analysis_log": "Analysis Log",
+      "tracker_status": "Tracker Status",
+      "processing_stats": "Processing Statistics",
+      "transaction_data": "Transaction Data"
+    },
+    "buttons": {
+      "browse_file": "Browse File",
+      "change_file": "Change File",
+      "click_to_change": "Click to Change File",
+                  "copy_log": "Copy Log",
+            "copy_all": "Copy All",
+      "view_details": "View Details"
+    },
+    "dragdrop": {
+      "drag_excel_here": "Drag Excel file here",
+      "release_to_select": "Release to select file",
+      "release_to_select_audit": "Release to select file",
+      "supported_formats": "Supports .xlsx and .xls formats",
+      "click_to_change": "Click to change file"
+    },
+    "status": {
+      "ready_to_analyze": "Ready to analyze, click to start",
+      "select_file_first": "Please select input file first",
+      "query_log_placeholder": "🔍 Time point query logs will be displayed here in real time...",
+      "analysis_log_placeholder": "🔍 Python analysis logs will be displayed here in real time...",
+      "text_selection_hint": "Supports text selection and copy-paste"
+    },
+    "labels": {
+      "result": "Result",
+      "output_files": "Output Files",
+      "time": "Time"
+    }
+  },
+  
+  "table": {
+    "headers": {
+      "row_number": "Row Number",
+      "timestamp": "Timestamp",
+      "income_amount": "Income Amount",
+      "expense_amount": "Expense Amount", 
+      "balance": "Balance",
+      "fund_attr": "Fund Attribute",
+      "flow_type": "Flow Type",
+      "behavior": "Behavior",
+      "algorithm": "Algorithm",
+      "file": "File",
+      "total_rows": "Total Rows",
+      "processed_rows": "Processed Rows",
+      "processing_steps": "Processing Steps",
+      "error_count": "Error Count",
+      "personal_balance": "Personal Balance",
+      "company_balance": "Company Balance",
+      "total_balance": "Total Balance",
+      "cumulative_misappropriation": "Cumulative Misappropriation",
+      "funding_gap": "Funding Gap"
+    },
+    "data": {
+      "transaction_data_row": "Transaction Data (Row {row})",
+      "transaction_data_prefix": "Transaction Data",
+      "row": "Row",
+      "query_success_with_time": "Query completed successfully - Algorithm: {algorithm} | Time: {time}s",
+      "query_success_completed": "Query completed successfully"
+    }
+  },
+  
+  "homepage": {
+    "algorithm_intro": "The system supports two core algorithms, you can choose the appropriate analysis method according to audit requirements",
+    "system_features": "System Features",
+    "features": {
+      "data_capacity": {
+        "value": "50M",
+        "description": "Maximum data processing capacity"
+      },
+      "dual_algorithm": {
+        "value": "Dual Algorithm",
+        "description": "FIFO + Balance Method"
+      },
+      "offline": {
+        "value": "Secure",
+        "description": "Fully localized processing to prevent data leakage"
+      },
+      "professional": {
+        "value": "Professional",
+        "description": "Professional-grade visual analysis reports with fund pool statistics"
+      }
+    }
+  },
+  
+  "process_status": {
+    "initializing": "Initializing analysis...",
+    "preparing": "Preparing analysis environment...",
+    "analyzing": "Analyzing...",
+    "completed": "Analysis completed",
+    "failed": "Analysis failed",
+    "stopped": "Analysis stopped"
+  },
+  
+  "settings_labels": {
+    "auto_save_description": "Automatically save query history and analysis results",
+    "notifications_description": "Show system notifications and operation tips",
+    "max_history_help": "Maximum number of query history records to keep (10-1000)",
+    "project_root": "Project Root Directory",
+    "auto_update": "Auto Update",
+    "auto_update_disabled": "Disabled in standalone version (no network required)",
+    "update_notifications": "Update Notifications",
+    "update_notifications_disabled": "Disabled in standalone version (no network required)",
+    "environment_status_normal": "Normal",
+    "environment_status_error": "Error",
+    "python_path": "Python Path",
+    "current_version": "Current Version",
+    "standalone_version_description": "Standalone version, no network updates required. All features are fully available.",
+    "python_version": "Python Version",
+    "python_env_check": "Python Environment Check",
+    "python_available": "Python {version} is available",
+    "python_not_available": "Python environment is not available",
+    "click_check_env_hint": "Click the check environment button to verify Python configuration",
+    "data_management": "Data Management",
+    "query_history": "Query History",
+    "clear_history": "Clear History", 
+    "clear_all_data": "Clear All Data",
+    "history_count": "History Count",
+    "last_query_time": "Last Query Time",
+    "storage_size": "Storage Size",
+    "data_actions": "Data Actions",
+    "app_update": "Application Update",
+    "version_info": "Version Info"
   }
 }
