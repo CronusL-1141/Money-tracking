@@ -1,10 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::process::{Command, Stdio};
+use tokio::process::{Command};
+use std::process::Stdio;
 use std::path::PathBuf;
 use std::fs;
-use std::io::{BufRead, BufReader};
+use tokio::io::{BufReader, AsyncBufReadExt};
 use tauri::command;
 use tauri::State;
 use serde::{Deserialize, Serialize};
@@ -199,40 +200,45 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
             let child_id = child.id();
             {
                 let mut process_status = state.current_process.lock().await;
-                process_status.process_id = Some(child_id);
+                process_status.process_id = child_id;
             }
             
             let stdout = child.stdout.take().unwrap();
-            let reader = BufReader::new(stdout);
+            let mut reader = BufReader::new(stdout);
             
             let mut output_lines = Vec::new();
             let mut final_progress = 5.0;  // 修复：与上面的初始进度保持一致
             
             // 实时读取输出
-            for line in reader.lines() {
-                match line {
-                    Ok(line_str) => {
-                        output_lines.push(line_str.clone());
-                        
-                        // 解析进度信息
-                        let progress = parse_progress_from_line(&line_str);
-                        if progress > final_progress {
-                            final_progress = progress; // parse_progress_from_line已经返回精度控制后的值
-                        }
-                        
-                        // 更新进程状态
-                        {
-                            let mut process_status = state.current_process.lock().await;
-                            process_status.progress = Some(final_progress);
-                            process_status.message = Some(extract_message_from_line(&line_str));
-                            process_status.output_log.push(format!("[{}] {}", 
-                                chrono::Utc::now().format("%H:%M:%S"), 
-                                line_str
-                            ));
+            loop {
+                let mut line = String::new();
+                match reader.read_line(&mut line).await {
+                    Ok(0) => break, // EOF
+                    Ok(_) => {
+                        let line_str = line.trim_end().to_string(); // 移除换行符
+                        if !line_str.is_empty() {
+                            output_lines.push(line_str.clone());
                             
-                            // 限制日志长度，避免内存占用过多
-                            if process_status.output_log.len() > 1000 {
-                                process_status.output_log.drain(0..100);
+                            // 解析进度信息
+                            let progress = parse_progress_from_line(&line_str);
+                            if progress > final_progress {
+                                final_progress = progress; // parse_progress_from_line已经返回精度控制后的值
+                            }
+                            
+                            // 更新进程状态
+                            {
+                                let mut process_status = state.current_process.lock().await;
+                                process_status.progress = Some(final_progress);
+                                process_status.message = Some(extract_message_from_line(&line_str));
+                                process_status.output_log.push(format!("[{}] {}", 
+                                    chrono::Utc::now().format("%H:%M:%S"), 
+                                    line_str
+                                ));
+                                
+                                // 限制日志长度，避免内存占用过多
+                                if process_status.output_log.len() > 1000 {
+                                    process_status.output_log.drain(0..100);
+                                }
                             }
                         }
                     }
@@ -244,7 +250,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
             }
             
             // 等待进程结束
-            let exit_status = child.wait().unwrap();
+            let exit_status = child.wait().await.unwrap();
             let full_output = output_lines.join("\n");
             
             if exit_status.success() {
@@ -339,32 +345,149 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
         .arg("--row")
         .arg(&query.row_number.to_string())
         .arg("--algorithm")
-        .arg(&query.algorithm);
+        .arg(&query.algorithm)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     
-    let result = match cmd.output() {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
+    // 初始化时点查询状态
+    {
+        let mut process_status = state.current_process.lock().await;
+        
+        if !process_status.output_log.is_empty() {
+            process_status.output_log.push(format!("[{}] ===== 开始时点查询 =====", 
+                chrono::Utc::now().format("%H:%M:%S")
+            ));
+        }
+        
+        process_status.output_log.push(format!("[{}] 🔍 执行时点查询: 第{}行", 
+            chrono::Utc::now().format("%H:%M:%S"), query.row_number
+        ));
+        process_status.output_log.push(format!("[{}] 📁 文件: {}", 
+            chrono::Utc::now().format("%H:%M:%S"), 
+            query.file_path.split(&['/', '\\'][..]).last().unwrap_or(&query.file_path)
+        ));
+        process_status.output_log.push(format!("[{}] 🔧 算法: {}", 
+            chrono::Utc::now().format("%H:%M:%S"), 
+            match query.algorithm.as_str() {
+                "FIFO" => "FIFO先进先出算法",
+                "BALANCE_METHOD" => "差额计算法",
+                _ => &query.algorithm
+            }
+        ));
+    }
+    
+    let result = match cmd.spawn() {
+        Ok(mut child) => {
+            let stdout = child.stdout.take().unwrap();
+            let stderr = child.stderr.take().unwrap();
             
-            if output.status.success() {
-                info!("Time point query completed successfully");
-                QueryResult {
-                    success: true,
-                    data: parse_query_output(&stdout),
-                    message: stdout.to_string(),
+            // 使用tokio处理并发读取stdout和stderr
+            let mut stdout_reader = BufReader::new(stdout);
+            let mut stderr_reader = BufReader::new(stderr);
+            
+            let mut stdout_lines = Vec::new();
+            
+            let mut stderr_lines = Vec::new();
+            
+            // 简单处理stderr
+            let stderr_handle = tokio::spawn(async move {
+                let mut lines = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    match stderr_reader.read_line(&mut line).await {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            line = line.trim_end().to_string();
+                            if !line.is_empty() {
+                                lines.push(line);
+                            }
+                        }
+                        Err(_) => break,
+                    }
                 }
-            } else {
-                warn!("Time point query failed: {}", stderr);
-                QueryResult {
-                    success: false,
-                    data: None,
-                    message: format!("查询失败: {}", stderr),
+                lines
+            });
+            
+            // 读取stdout（JSON结果）
+            loop {
+                let mut line = String::new();
+                match stdout_reader.read_line(&mut line).await {
+                    Ok(0) => break, // EOF
+                    Ok(_) => {
+                        line = line.trim_end().to_string(); // 移除换行符
+                        if !line.is_empty() {
+                            stdout_lines.push(line);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading stdout line: {}", e);
+                        break;
+                    }
+                }
+            }
+            
+            // 等待stderr读取完成
+            if let Ok(stderr_result) = stderr_handle.await {
+                stderr_lines = stderr_result;
+            }
+            
+            // 将stderr调试信息添加到日志
+            {
+                let mut process_status = state.current_process.lock().await;
+                for line in &stderr_lines {
+                    process_status.output_log.push(format!("[{}] {}", 
+                        chrono::Utc::now().format("%H:%M:%S"), 
+                        line
+                    ));
+                }
+                
+                // 限制日志长度
+                if process_status.output_log.len() > 1000 {
+                    process_status.output_log.drain(0..100);
+                }
+            }
+            
+            // 等待子进程完成
+            let exit_status = child.wait().await;
+            let stdout_output = stdout_lines.join("\n");
+            let stderr_output = stderr_lines.join("\n");
+            
+            match exit_status {
+                Ok(status) if status.success() => {
+                    info!("Time point query completed successfully");
+                    let parsed_data = parse_query_output(&stdout_output);
+                    info!("解析后的数据: {:?}", parsed_data.is_some());
+                    QueryResult {
+                        success: true,
+                        data: parsed_data,
+                        message: "查询完成".to_string(), // 简化消息，详细日志已实时显示
+                    }
+                }
+                Ok(_) => {
+                    warn!("Time point query failed with non-zero exit code");
+                    QueryResult {
+                        success: false,
+                        data: None,
+                        message: "查询失败，请查看日志了解详情".to_string(),
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to wait for time point query process: {}", e);
+                    QueryResult {
+                        success: false,
+                        data: None,
+                        message: format!("进程等待失败: {}", e),
+                    }
                 }
             }
         }
         Err(e) => {
-            error!("Failed to execute time point query: {}", e);
-            return Err(format!("执行失败: {}", e));
+            error!("Failed to spawn time point query process: {}", e);
+            QueryResult {
+                success: false,
+                data: None,
+                message: format!("进程启动失败: {}", e),
+            }
         }
     };
     
@@ -403,7 +526,7 @@ async fn check_python_env() -> Result<serde_json::Value, String> {
     let mut cmd = Command::new(&python_exe);
     cmd.arg("--version");
     
-    match cmd.output() {
+    match cmd.output().await {
         Ok(output) => {
             let version = String::from_utf8_lossy(&output.stdout);
             let project_root = get_project_root().unwrap_or_else(|_| PathBuf::from("."));
@@ -457,7 +580,8 @@ async fn stop_analysis(state: State<'_, AppState>) -> Result<bool, String> {
                 .arg("/F")  // 强制终止
                 .arg("/PID") 
                 .arg(process_id.to_string())
-                .output() 
+                .output()
+                .await
             {
                 Ok(output) => {
                     if output.status.success() {
@@ -696,14 +820,68 @@ fn extract_output_files(output: &str) -> Vec<String> {
 
 // 辅助函数：解析查询输出为JSON
 fn parse_query_output(output: &str) -> Option<serde_json::Value> {
-    // 尝试从输出中提取JSON数据
-    for line in output.lines() {
+    info!("开始解析查询输出，总字符数: {}", output.len());
+    info!("Python stdout输出内容:\n{}", output);
+    
+    let lines: Vec<&str> = output.lines().collect();
+    info!("输出共 {} 行", lines.len());
+    
+    // 查找JSON标记块
+    let mut json_start_idx = None;
+    let mut json_end_idx = None;
+    
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() == "JSON_RESULT_START" {
+            json_start_idx = Some(i + 1);
+            info!("找到JSON_RESULT_START标记，位置: 第{}行", i);
+        } else if line.trim() == "JSON_RESULT_END" {
+            json_end_idx = Some(i);
+            info!("找到JSON_RESULT_END标记，位置: 第{}行", i);
+            break;
+        }
+    }
+    
+    info!("JSON标记索引 - 开始: {:?}, 结束: {:?}", json_start_idx, json_end_idx);
+    
+    // 如果找到标记，解析标记之间的JSON
+    if let (Some(start), Some(end)) = (json_start_idx, json_end_idx) {
+        if start < end && start < lines.len() {
+            let json_line = lines[start];
+            info!("准备解析JSON行: {}", json_line);
+            match serde_json::from_str(json_line.trim()) {
+                Ok(json) => {
+                    info!("JSON解析成功");
+                    return Some(json);
+                }
+                Err(e) => {
+                    error!("JSON解析失败: {}", e);
+                }
+            }
+        } else {
+            error!("JSON标记索引无效: start={}, end={}, lines.len()={}", start, end, lines.len());
+        }
+    } else {
+        error!("未找到有效的JSON标记对");
+    }
+    
+    // 兼容性：尝试从输出中提取单行JSON数据（旧格式）
+    warn!("尝试使用兼容性模式解析JSON");
+    for (i, line) in lines.iter().enumerate() {
         if line.trim().starts_with('{') && line.trim().ends_with('}') {
-            if let Ok(json) = serde_json::from_str(line.trim()) {
-                return Some(json);
+            info!("找到潜在JSON行 (第{}行): {}", i, line);
+            match serde_json::from_str(line.trim()) {
+                Ok(json) => {
+                    info!("兼容性模式JSON解析成功");
+                    return Some(json);
+                }
+                Err(e) => {
+                    warn!("兼容性模式JSON解析失败: {}", e);
+                }
             }
         }
     }
+    
+    error!("所有JSON解析方法都失败了");
     None
 }
 
@@ -811,7 +989,7 @@ fn parse_progress_from_line(line: &str) -> f32 {
         return 90.0;
     } else if line.contains("💾 保存分析结果到:") {
         return 95.0;
-    } else if line.contains("📋 生成投资产品交易记录:") {
+    } else if line.contains("📋 生成场外资金池记录:") {
         return 98.0;
     } else if line.contains("✅") && (line.contains("算法分析完成") || line.contains("FIFO算法分析完成") || line.contains("BALANCE_METHOD算法分析完成")) {
         return 100.0;

@@ -31,6 +31,9 @@ class FlowIntegrityValidator:
             验证结果字典，包含修复后的数据框（如果有修复的话）
         """
         audit_logger.info("开始原始流水完整性验证...")
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
         
         self.validation_errors = []
         self.optimization_count = 0

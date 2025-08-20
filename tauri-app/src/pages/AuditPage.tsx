@@ -516,8 +516,16 @@ const AuditPage: React.FC = () => {
                         {log}
                       </Box>
                     ))}
-                    {/* 自动滚动到底部的占位符 */}
-                    <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+                    {/* 自动滚动到底部的占位符 - 只在分析进行中时滚动 */}
+                    <div ref={(el) => {
+                      if (el && isAnalyzing) {
+                        el.scrollIntoView({ 
+                          behavior: 'smooth', 
+                          block: 'nearest',
+                          inline: 'nearest' 
+                        });
+                      }
+                    }} />
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
