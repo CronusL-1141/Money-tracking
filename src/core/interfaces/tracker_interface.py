@@ -88,9 +88,9 @@ class ITracker(ABC):
         pass
     
     @abstractmethod
-    def 生成投资产品交易记录Excel(self, 文件名: str = "投资产品交易记录.xlsx") -> None:
+    def 生成场外资金池记录Excel(self, 文件名: str = "场外资金池记录.xlsx") -> None:
         """
-        生成投资产品交易记录的Excel文件
+        生成场外资金池记录的Excel文件
         
         Args:
             文件名: 保存的Excel文件名

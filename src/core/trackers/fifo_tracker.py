@@ -42,9 +42,9 @@ class FIFOTracker(ITracker):
         """获取当前资金占比 - 委托给现有实现"""
         return self._legacy_tracker.获取当前资金占比()
     
-    def 生成投资产品交易记录Excel(self, 文件名: str = "投资产品交易记录.xlsx") -> None:
-        """生成投资产品交易记录Excel - 委托给现有实现"""
-        return self._legacy_tracker.生成投资产品交易记录Excel(文件名)
+    def 生成场外资金池记录Excel(self, 文件名: str = "场外资金池记录.xlsx") -> None:
+        """生成场外资金池记录Excel - 委托给现有实现"""
+        return self._legacy_tracker.生成场外资金池记录Excel(文件名)
     
     # 属性访问 - 委托给现有实现
     @property

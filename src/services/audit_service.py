@@ -129,10 +129,10 @@ class AuditService:
             print(f"💾 保存分析结果到: {output_file}")
             self.data_processor.保存结果(df, output_file)
             
-            # 8. 生成投资产品交易记录Excel
-            investment_file = f"投资产品交易记录_{self.algorithm}.xlsx"
-            print(f"📋 生成投资产品交易记录: {investment_file}")
-            self.tracker.生成投资产品交易记录Excel(investment_file)
+            # 8. 生成场外资金池记录Excel
+            investment_file = f"场外资金池记录_{self.algorithm}.xlsx"
+            print(f"📋 生成场外资金池记录: {investment_file}")
+            self.tracker.生成场外资金池记录Excel(investment_file)
             
             processing_time = time.time() - start_time
             audit_logger.log_performance(f"{self.algorithm}完整分析", processing_time, len(df))
