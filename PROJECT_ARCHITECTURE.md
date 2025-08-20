@@ -1,23 +1,24 @@
 # 涉案资金追踪分析系统 - 完整项目架构文档
 
-**版本**: v3.0.0  
-**更新时间**: 2025年1月  
+**版本**: v3.1.0  
+**更新时间**: 2025年1月20日  
 **文档性质**: 项目字典 / 开发者参考手册
 
----
+
 
 ## 📋 目录
 
 1. [项目概述](#项目概述)
-2. [系统架构](#系统架构)
-3. [项目结构详解](#项目结构详解)
-4. [核心模块详细说明](#核心模块详细说明)
-5. [数据流程与字段映射](#数据流程与字段映射)
-6. [输入输出规范](#输入输出规范)
-7. [API接口文档](#api接口文档)
-8. [配置与部署](#配置与部署)
-9. [测试架构](#测试架构)
-10. [GUI应用架构](#gui应用架构)
+2. [版本更新日志](#版本更新日志)
+3. [系统架构](#系统架构)
+4. [项目结构详解](#项目结构详解)
+5. [核心模块详细说明](#核心模块详细说明)
+6. [数据流程与字段映射](#数据流程与字段映射)
+7. [输入输出规范](#输入输出规范)
+8. [API接口文档](#api接口文档)
+9. [配置与部署](#配置与部署)
+10. [测试架构](#测试架构)
+11. [GUI应用架构](#gui应用架构)
 
 ---
 
@@ -41,6 +42,83 @@
 4. **流水完整性**: 自动检测修复数据问题
 5. **多界面支持**: CLI命令行 + GUI桌面应用
 6. **实时分析**: 支持实时日志输出和进度跟踪
+
+---
+
+## 🔄 版本更新日志
+
+### v3.1.0 (2025-01-20) - 资金池查询功能完善
+
+#### 🆕 新增功能
+- **资金池详细查询**: 在时点查询页面新增资金池查询区域，支持下拉选择并查看详细交易记录
+- **行为性质输出修复**: 解决时点查询中行为性质字段为空的问题
+- **资金占比字段优化**: 场外资金池记录中分离单笔资金占比和总资金占比为两个独立字段
+- **全局状态管理**: 实现页面切换时状态持久化，避免数据丢失
+- **查询历史持久化**: 时点查询历史在应用重启后仍可保留
+- **日志分离管理**: 分析日志和查询日志独立管理，使用本地时间戳
+
+#### 📁 新增文件
+- `src/services/fund_pool_cli.py` - 资金池查询CLI脚本
+- `tauri-app/src/contexts/AppStateContext.tsx` - 全局应用状态管理上下文
+- `tauri-app/src/utils/storageUtils.ts` - 本地存储管理工具（历史记录、数据清理）
+- `tauri-app/src/utils/timeUtils.ts` - 时间格式化和日志工具函数
+- `src/test_behavior_cleanup.py` - 行为性质清理功能测试脚本
+- 多个测试和数据文件
+
+#### 🔧 核心方法新增
+**Python后端**:
+- `TimePointQueryService.query_fund_pool(pool_name)` - 资金池详细查询
+- `BalanceMethodTracker` 中资金池记录结构重构（单笔/总占比分离）
+- `_process_single_row()` 中添加行为性质存储逻辑
+
+**Rust后端**:
+- `query_fund_pool(pool_name, file_path, row_number, algorithm)` - 资金池查询命令
+
+**前端 (React/TypeScript)**:
+- `handleFundPoolQuery()` - 资金池查询处理函数
+- `AppStateProvider` - 全局状态提供者
+- `QueryHistoryStorage` - 查询历史本地存储管理
+- `getCurrentLocalTime()`, `formatLocalTime()`, `createLogMessage()` - 时间工具函数
+
+#### 🏷️ 新增接口定义
+```typescript
+interface FundPool {
+  name: string;
+  total_amount: number;
+  personal_ratio: number;
+  company_ratio: number;
+}
+
+interface FundPoolRecord {
+  交易时间: string;
+  资金池名称: string;
+  入金: number | string;
+  出金: number | string;
+  总余额: number | string;
+  单笔资金占比: string;
+  总资金占比: string;
+}
+
+interface FundPoolQueryResult {
+  success: boolean;
+  message?: string;
+  pool_name?: string;
+  records?: FundPoolRecord[];
+  summary?: {
+    total_inflow: number;
+    total_outflow: number;
+    current_balance: number;
+    record_count: number;
+  };
+}
+```
+
+#### 🎨 UI/UX 改进
+- 资金池查询区域采用横向布局，位于时点查询页面输出日志上方
+- 隐藏资金池表格中的行为性质、累计申购、累计赎回字段，专注核心信息
+- 添加总计行显示汇总信息，视觉区分普通交易记录
+- 状态持久化确保页面切换时数据不丢失
+- 独立的分析和查询日志显示，使用本地时间戳
 
 ---
 
@@ -104,7 +182,8 @@
 │   │   ├── __init__.py
 │   │   ├── audit_service.py            # 审计分析服务 ⭐
 │   │   ├── time_point_query_service.py # 时点查询服务 ⭐  
-│   │   └── query_cli.py               # CLI查询接口
+│   │   ├── query_cli.py               # CLI查询接口
+│   │   └── fund_pool_cli.py           # 资金池查询CLI脚本 ⭐
 │   │
 │   ├── utils/                  # 🛠️ 工具模块层
 │   │   ├── __init__.py
@@ -143,14 +222,18 @@
 │   │   │   ├── TimePointQueryPage.tsx # 时点查询页 ⭐
 │   │   │   └── SettingsPage.tsx      # 设置页
 │   │   ├── components/       # 通用组件
+│   │   ├── contexts/         # React上下文 ⭐
+│   │   │   └── AppStateContext.tsx  # 全局状态管理上下文 ⭐
 │   │   ├── services/         # 前端服务
 │   │   │   ├── fileService.ts        # 文件处理服务
 │   │   │   └── pythonService.ts      # Python接口服务  
 │   │   ├── types/            # TypeScript类型定义
 │   │   │   ├── app.ts               # 应用类型
 │   │   │   ├── python.ts            # Python接口类型
-│   │   │   └── rust-commands.ts     # Rust命令类型
-│   │   └── utils/            # 前端工具
+│   │   │   └── rust-commands.ts     # Rust命令类型 (已扩展) ⭐
+│   │   └── utils/            # 前端工具 ⭐
+│   │       ├── storageUtils.ts      # 本地存储管理工具 ⭐
+│   │       └── timeUtils.ts         # 时间格式化工具 ⭐
 │   │
 │   ├── package.json          # Node.js依赖配置
 │   └── 🚀启动GUI界面.md       # GUI启动说明
@@ -329,7 +412,7 @@ def _更新投资产品资金池(self, 投资产品编号: str, 金额: float, �
 
 ### 5. 差额计算法实现 (core/trackers/balance_method_tracker.py)
 
-**功能**: 差额计算法（余额优先）算法实现
+**功能**: 差额计算法（余额优先）算法实现，支持资金占比字段分离
 
 **核心数据结构**:
 ```python
@@ -344,9 +427,20 @@ class BalanceMethodTracker(ITracker):
         self._累计垫付金额: float = 0
         self._累计已归还公司本金: float = 0
         
-        # 场外资金池管理（简化版）
+        # 场外资金池管理（简化版）⭐ 已重构
         self._投资产品资金池: Dict[str, Dict] = {}
         self._场外资金池记录: List[Dict] = []
+```
+
+**资金池记录结构重构 ⭐ v3.1.0**:
+```python
+# 投资产品资金池新增字段
+'累计个人金额': 0,    # 新增：累计个人投入金额
+'累计公司金额': 0,    # 新增：累计公司投入金额
+
+# 场外资金池记录新增字段分离
+'单笔资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",  # 本次交易占比
+'总资金占比': f"个人{总个人占比:.1%}，公司{总公司占比:.1%}",   # 总体资金占比
 ```
 
 **关键方法**:
@@ -443,7 +537,7 @@ def _generate_final_summary(self):
 
 ### 8. 时点查询服务 (services/time_point_query_service.py)
 
-**功能**: 查询任意时点的系统状态，支持历史记录管理
+**功能**: 查询任意时点的系统状态，支持历史记录管理和资金池详细查询
 
 **核心功能**:
 ```python
@@ -453,13 +547,43 @@ class TimePointQueryService:
         # 1. 数据加载和验证
         # 2. 初始化追踪器
         # 3. 处理到目标行
-        # 4. 返回状态快照
+        # 4. 返回状态快照（包含可用资金池列表）
+        
+    def query_fund_pool(self, pool_name: str) -> Dict[str, Any]:
+        """资金池详细查询 ⭐ 新增"""
+        # 1. 验证追踪器状态
+        # 2. 筛选指定资金池的记录
+        # 3. 过滤显示字段（隐藏行为性质、累计申购、累计赎回）
+        # 4. 计算汇总信息并添加总计行
         
     def get_query_history(self) -> List[Dict[str, Any]]:
         """获取查询历史"""
         
     def export_query_result(self, result: Dict[str, Any], format: str = "json") -> str:
         """导出查询结果"""
+        
+    def _process_single_row(self, row_idx: int) -> Dict[str, Any]:
+        """处理单行数据（已修复行为性质存储问题）⭐ 修复"""
+        # 新增：将计算出的行为性质存储回DataFrame
+        if self.data is not None:
+            self.data.at[row_idx, '行为性质'] = 行为性质
+            self.data.at[row_idx, '个人占比'] = 个人占比
+            self.data.at[row_idx, '公司占比'] = 公司占比
+```
+
+**资金池查询返回结构**:
+```python
+{
+    "success": bool,
+    "pool_name": str,
+    "records": List[Dict],  # 过滤后的交易记录
+    "summary": {
+        "total_inflow": float,
+        "total_outflow": float, 
+        "current_balance": float,
+        "record_count": int
+    }
+}
 ```
 
 ### 9. 数据处理器 (utils/data_processor.py)
@@ -636,6 +760,22 @@ python src/services/query_cli.py -f data/input/流水.xlsx --interactive
 python src/services/query_cli.py --history
 ```
 
+#### 3. 资金池查询接口 (fund_pool_cli.py) ⭐ v3.1.0新增
+
+```bash
+# 基本语法
+python src/services/fund_pool_cli.py [OPTIONS]
+
+# 参数说明
+--file           Excel文件路径 (必需)
+--row            查询的目标行号 (必需)
+--algorithm      算法类型 (FIFO/BALANCE_METHOD)
+--pool           资金池名称 (必需)
+
+# 使用示例
+python src/services/fund_pool_cli.py --file data/input/流水.xlsx --row 100 --algorithm BALANCE_METHOD --pool "理财-SL100613100620"
+```
+
 ### Python API接口
 
 #### 1. 审计分析服务API
@@ -714,6 +854,9 @@ async fn get_analysis_progress() -> Result<f64, String>
 async fn query_time_point(file_path: String, target_row: u32, algorithm: String) -> Result<serde_json::Value, String>
 
 #[tauri::command]
+async fn query_fund_pool(pool_name: String, file_path: String, row_number: u32, algorithm: String) -> Result<serde_json::Value, String>  // ⭐ v3.1.0新增
+
+#[tauri::command]
 async fn select_file() -> Result<String, String>
 
 #[tauri::command]
@@ -749,6 +892,38 @@ export interface QueryResult {
     tracker_state: any;
     processing_stats: any;
     recent_steps: any[];
+  };
+  available_fund_pools?: FundPool[];  // ⭐ v3.1.0新增
+}
+
+// ⭐ v3.1.0新增接口定义
+export interface FundPool {
+  name: string;
+  total_amount: number;
+  personal_ratio: number;
+  company_ratio: number;
+}
+
+export interface FundPoolRecord {
+  交易时间: string;
+  资金池名称: string;
+  入金: number | string;
+  出金: number | string;
+  总余额: number | string;
+  单笔资金占比: string;    // 新增：单次交易占比
+  总资金占比: string;      // 新增：总体资金占比
+}
+
+export interface FundPoolQueryResult {
+  success: boolean;
+  message?: string;
+  pool_name?: string;
+  records?: FundPoolRecord[];
+  summary?: {
+    total_inflow: number;
+    total_outflow: number;
+    current_balance: number;
+    record_count: number;
   };
 }
 ```
@@ -1212,6 +1387,178 @@ export const pythonService = {
     return await invoke('get_analysis_progress');
   }
 };
+```
+
+### 新增工具层 (utils/) ⭐ v3.1.0
+
+#### 全局状态管理 (AppStateContext.tsx)
+
+**功能**: 提供应用级别的状态管理，解决页面切换时状态丢失问题
+
+**核心功能**:
+```typescript
+export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // 审计页面状态
+  const [auditState, setAuditState] = useState<AuditPageState>({
+    algorithm: 'FIFO',
+    inputFile: null,
+    isAnalyzing: false,
+    progress: 0,
+    analysisLog: [],
+    currentStep: '',
+    isDragOver: false
+  });
+  
+  // 时点查询页面状态
+  const [queryState, setQueryState] = useState<TimePointQueryPageState>({
+    filePath: '',
+    rowNumber: '',
+    algorithm: 'FIFO',
+    queryResult: null,
+    isQuerying: false,
+    history: [],
+    isDragOver: false,
+    queryLog: []  // ⭐ 独立查询日志
+  });
+  
+  // 关键方法
+  const addQueryHistory = useCallback((query: QueryHistory) => {
+    // 添加到localStorage和状态
+    QueryHistoryStorage.addRecord(query);
+    updateQueryState({ history: [...queryState.history, query] });
+  }, [queryState.history]);
+  
+  const appendQueryLog = useCallback((message: string) => {
+    updateQueryState({ queryLog: [...queryState.queryLog, message] });
+  }, [queryState.queryLog]);
+};
+```
+
+#### 时间工具函数 (timeUtils.ts)
+
+**功能**: 统一时间格式化和日志消息创建
+
+**核心函数**:
+```typescript
+export const getCurrentLocalTime = (type: 'log' | 'display' | 'filename' | 'iso'): string => {
+  const now = new Date();
+  switch (type) {
+    case 'log':
+      return now.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    case 'filename':
+      return now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
+    case 'iso':
+      return now.toISOString();
+    default:
+      return now.toLocaleString();
+  }
+};
+
+export const formatLocalTime = (dateInput: Date | string, type: 'log' | 'display' | 'filename'): string => {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  return getCurrentLocalTime(type);
+};
+
+export const createLogMessage = (message: string, level: 'info' | 'success' | 'error' | 'warning' = 'info'): string => {
+  const timestamp = getCurrentLocalTime('log');
+  const emoji = {
+    'info': 'ℹ️',
+    'success': '✅',
+    'error': '❌',
+    'warning': '⚠️'
+  }[level];
+  return `[${timestamp}] ${emoji} ${message}`;
+};
+```
+
+#### 本地存储工具 (storageUtils.ts)
+
+**功能**: 管理查询历史的本地存储，数据清理和迁移
+
+**核心类**:
+```typescript
+export class QueryHistoryStorage {
+  private static readonly STORAGE_KEY = 'query_history';
+  private static readonly MAX_RECORDS = 100;
+
+  static addRecord(record: Omit<QueryHistory, 'id'>): void {
+    // 去重和限制记录数量
+    const existing = this.load();
+    const newRecord: QueryHistory = {
+      ...record,
+      id: Date.now().toString(),
+      timestamp: new Date()
+    };
+    
+    // 检查是否已存在相同查询
+    const isDuplicate = existing.some(item => 
+      item.filePath === record.filePath && 
+      item.rowNumber === record.rowNumber && 
+      item.algorithm === record.algorithm
+    );
+    
+    if (!isDuplicate) {
+      const updated = [newRecord, ...existing].slice(0, this.MAX_RECORDS);
+      this.save(updated);
+    }
+  }
+  
+  static load(): QueryHistory[] {
+    // 加载并恢复Date对象
+    const stored = localStorage.getItem(this.STORAGE_KEY);
+    if (!stored) return [];
+    
+    const parsed = JSON.parse(stored);
+    return parsed.map((item: any) => ({
+      ...item,
+      timestamp: new Date(item.timestamp)
+    }));
+  }
+  
+  static getStats(): { count: number; lastQueryTime?: Date; storageSize: number } {
+    // 获取存储统计信息
+    const records = this.load();
+    const storageSize = new Blob([localStorage.getItem(this.STORAGE_KEY) || '']).size;
+    
+    return {
+      count: records.length,
+      lastQueryTime: records.length > 0 ? records[0].timestamp : undefined,
+      storageSize
+    };
+  }
+}
+
+export class DataCleanup {
+  static clearAllData(): void {
+    // 清空所有应用数据
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('app_') || key.includes('query') || key.includes('audit')) {
+        localStorage.removeItem(key);
+      }
+    });
+  }
+  
+  static cleanExpiredData(daysToKeep: number = 30): void {
+    // 清理过期数据
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+    
+    const records = QueryHistoryStorage.load();
+    const validRecords = records.filter(record => record.timestamp > cutoffDate);
+    
+    if (validRecords.length < records.length) {
+      localStorage.setItem('query_history', JSON.stringify(validRecords));
+    }
+  }
+}
 ```
 
 ---
