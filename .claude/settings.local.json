@@ -4,7 +4,8 @@
       "Bash(pyinstaller:*)",
       "Bash(cp:*)",
       "Bash(powershell:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
