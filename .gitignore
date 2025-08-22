@@ -84,3 +84,6 @@ config/personal/
 
 # Windows系统文件
 ~$*
+
+# Claude Code配置文件
+.claude/
