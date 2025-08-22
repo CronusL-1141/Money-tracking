@@ -362,7 +362,7 @@ class BalanceMethodTracker(ITracker):
             '总计个人应分配利润': Config.format_number(self._总计个人应分配利润),
             '总计公司应分配利润': Config.format_number(self._总计公司应分配利润),
             '已初始化': self._已初始化,
-            '资金缺口': Config.format_number(self._累计挪用金额 - self._累计由资金池回归个人余额本金)
+            '资金缺口': Config.format_number(self._累计挪用金额 - self._累计由资金池回归公司余额本金)
         }
     
     def 获取当前资金占比(self) -> Tuple[float, float]:

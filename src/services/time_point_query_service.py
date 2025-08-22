@@ -480,9 +480,9 @@ class TimePointQueryService:
         if self.tracker is None:
             return {}
         
-        # 计算资金缺口：累计挪用 - 累计个人归还公司本金
+        # 计算资金缺口：累计挪用 - 累计归还给公司的本金
         资金缺口 = (self.tracker.累计挪用金额 - 
-                   self.tracker.累计由资金池回归个人余额本金)
+                   self.tracker.累计由资金池回归公司余额本金)
         
         return {
             "personal_balance": self.tracker.个人余额,
