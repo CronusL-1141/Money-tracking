@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pyinstaller:*)",
       "Bash(cp:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
