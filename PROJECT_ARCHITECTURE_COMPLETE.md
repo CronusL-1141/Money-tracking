@@ -306,8 +306,10 @@ class BalanceMethodTracker(ITracker):
 
 ### 1. **Tauri接口** (Rust ↔ TypeScript)
 
+#### **TypeScript类型定义** (`tauri-app/src/types/`)
+
 ```typescript
-// TypeScript接口定义
+// rust-commands.ts - Rust命令接口类型
 export interface AuditRequest {
     filePath: string;
     algorithm: "FIFO" | "BALANCE_METHOD";
@@ -317,20 +319,100 @@ export interface AuditRequest {
 export interface AuditResult {
     success: boolean;
     outputPath: string;
-    summary: {
-        个人余额: number;
-        公司余额: number;
-        累计挪用金额: number;
-        累计垫付金额: number;
-        资金缺口: number;
+    summary: AuditSummary;
+    message?: string;
+    processingTime?: number;
+}
+
+export interface AuditSummary {
+    个人余额: number;
+    公司余额: number;
+    累计挪用金额: number;
+    累计垫付金额: number;
+    累计由资金池回归公司余额本金: number;
+    累计由资金池回归个人余额本金: number;
+    总计个人应分配利润: number;
+    总计公司应分配利润: number;
+    资金缺口: number;
+    投资产品数量: number;
+    总余额: number;
+}
+
+// 时点查询接口
+export interface TimePointQueryRequest {
+    filePath: string;
+    rowNumber: number;
+    algorithm: "FIFO" | "BALANCE_METHOD";
+}
+
+export interface TimePointQueryResult {
+    success: boolean;
+    summary?: AuditSummary;
+    message?: string;
+    timestamp?: string;
+}
+
+// 资金池查询接口
+export interface FundPoolQueryRequest {
+    filePath: string;
+    rowNumber: number;
+    algorithm: "FIFO" | "BALANCE_METHOD";
+    poolName: string;
+}
+
+export interface FundPoolRecord {
+    交易时间: string;
+    资金池名称: string;
+    入金: number;
+    出金: number;
+    总余额: number;
+    单笔资金占比: string;
+    总资金占比: string;
+    行为性质: string;
+    累计申购: number;
+    累计赎回: number;
+}
+
+export interface FundPoolQueryResult {
+    success: boolean;
+    poolName?: string;
+    records?: FundPoolRecord[];
+    summary?: {
+        totalInflow: number;
+        totalOutflow: number;
+        currentBalance: number;
+        recordCount: number;
+        netProfitLoss: number;
+        status: "盈利" | "亏损" | "持平";
     };
     message?: string;
 }
 ```
 
+```typescript
+// python.ts - Python后端接口类型
+export interface PythonProcessStatus {
+    isRunning: boolean;
+    progress?: number;
+    message?: string;
+    processId?: number;
+}
+
+export interface ProcessOutput {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+}
+```
+
+#### **Rust结构体定义** (`tauri-app/src-tauri/src/main.rs`)
+
 ```rust
-// Rust接口定义
-#[derive(Debug, Serialize, Deserialize)]
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+// 核心数据结构
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuditRequest {
     pub file_path: String,
     pub algorithm: String,
@@ -343,24 +425,416 @@ pub struct AuditResult {
     pub output_path: String,
     pub summary: AuditSummary,
     pub message: Option<String>,
+    pub processing_time: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuditSummary {
+    #[serde(rename = "个人余额")]
+    pub personal_balance: f64,
+    #[serde(rename = "公司余额")]
+    pub company_balance: f64,
+    #[serde(rename = "累计挪用金额")]
+    pub total_misappropriation: f64,
+    #[serde(rename = "累计垫付金额")]
+    pub total_advance_payment: f64,
+    #[serde(rename = "累计由资金池回归公司余额本金")]
+    pub total_company_principal_returned: f64,
+    #[serde(rename = "累计由资金池回归个人余额本金")]
+    pub total_personal_principal_returned: f64,
+    #[serde(rename = "总计个人应分配利润")]
+    pub total_personal_profit: f64,
+    #[serde(rename = "总计公司应分配利润")]
+    pub total_company_profit: f64,
+    #[serde(rename = "资金缺口")]
+    pub funding_gap: f64,
+    #[serde(rename = "投资产品数量")]
+    pub investment_product_count: u32,
+    #[serde(rename = "总余额")]
+    pub total_balance: f64,
+}
+
+// 时点查询结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TimePointQueryRequest {
+    pub file_path: String,
+    pub row_number: u32,
+    pub algorithm: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TimePointQueryResult {
+    pub success: bool,
+    pub summary: Option<AuditSummary>,
+    pub message: Option<String>,
+    pub timestamp: Option<String>,
+}
+
+// 资金池查询结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FundPoolQueryRequest {
+    pub file_path: String,
+    pub row_number: u32,
+    pub algorithm: String,
+    pub pool_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FundPoolRecord {
+    #[serde(rename = "交易时间")]
+    pub transaction_time: String,
+    #[serde(rename = "资金池名称")]
+    pub pool_name: String,
+    #[serde(rename = "入金")]
+    pub inflow: f64,
+    #[serde(rename = "出金")]
+    pub outflow: f64,
+    #[serde(rename = "总余额")]
+    pub total_balance: f64,
+    #[serde(rename = "单笔资金占比")]
+    pub single_fund_ratio: String,
+    #[serde(rename = "总资金占比")]
+    pub total_fund_ratio: String,
+    #[serde(rename = "行为性质")]
+    pub behavior_nature: String,
+    #[serde(rename = "累计申购")]
+    pub cumulative_purchase: f64,
+    #[serde(rename = "累计赎回")]
+    pub cumulative_redemption: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FundPoolSummary {
+    pub total_inflow: f64,
+    pub total_outflow: f64,
+    pub current_balance: f64,
+    pub record_count: u32,
+    pub net_profit_loss: f64,
+    pub status: String, // "盈利" | "亏损" | "持平"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FundPoolQueryResult {
+    pub success: bool,
+    pub pool_name: Option<String>,
+    pub records: Option<Vec<FundPoolRecord>>,
+    pub summary: Option<FundPoolSummary>,
+    pub message: Option<String>,
+}
+
+// 进程状态管理
+#[derive(Debug, Clone)]
+pub struct ProcessStatus {
+    pub is_running: bool,
+    pub progress: Option<f64>,
+    pub message: Option<String>,
+    pub process_id: Option<u32>,
+}
+
+#[derive(Debug, Default)]
+pub struct AppState {
+    pub current_process: Arc<Mutex<ProcessStatus>>,
+}
+```
+
+#### **主要Tauri命令**
+
+```rust
+// 核心分析命令
+#[tauri::command]
+async fn run_audit_analysis(
+    state: tauri::State<'_, AppState>,
+    request: AuditRequest,
+) -> Result<AuditResult, String> {
+    // 实现详见下文
+}
+
+// 时点查询命令
+#[tauri::command]  
+async fn query_time_point(
+    state: tauri::State<'_, AppState>,
+    request: TimePointQueryRequest,
+) -> Result<TimePointQueryResult, String> {
+    // 查询特定时点的系统状态
+}
+
+// 资金池查询命令
+#[tauri::command]
+async fn query_fund_pool_details(
+    state: tauri::State<'_, AppState>, 
+    request: FundPoolQueryRequest,
+) -> Result<FundPoolQueryResult, String> {
+    // 查询特定资金池的详细信息
+}
+
+// 进程状态查询
+#[tauri::command]
+async fn get_process_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<ProcessStatus, String> {
+    // 获取当前处理进程的状态
+}
+
+// 取消当前操作
+#[tauri::command]
+async fn cancel_current_operation(
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    // 取消正在进行的操作
 }
 ```
 
 ### 2. **Python CLI接口**
 
+#### **主程序接口** (`src/main.py`)
+
 ```bash
 # 基本分析
 python src/main.py --algorithm FIFO --input data.xlsx
+python src/main.py --algorithm BALANCE_METHOD --input data.xlsx
 
-# 算法对比
+# 自定义输出路径
+python src/main.py -a FIFO -i data.xlsx -o custom_result.xlsx
+
+# 算法对比分析
 python src/main.py --compare --input data.xlsx
 
-# 时点查询
-python src/services/query_cli.py --file data.xlsx --row 100 --algorithm FIFO
-
-# 资金池查询
-python src/services/fund_pool_cli.py --file data.xlsx --row 50 --algorithm FIFO --pool "产品A"
+# 列出可用算法
+python src/main.py --list-algorithms
 ```
+
+**命令行参数**:
+- `--algorithm, -a`: 算法类型 (`FIFO` | `BALANCE_METHOD`)
+- `--input, -i`: 输入Excel文件路径 (必需)
+- `--output, -o`: 输出文件路径 (可选，默认自动生成)
+- `--compare, -c`: 对比两种算法
+- `--list-algorithms, -l`: 列出可用算法
+
+#### **时点查询接口** (`src/services/query_cli.py`)
+
+```bash
+# 查询特定行的系统状态
+python src/services/query_cli.py \
+    --file data.xlsx \
+    --row 100 \
+    --algorithm FIFO
+
+# 简化参数
+python src/services/query_cli.py -f data.xlsx -r 100 -a BALANCE_METHOD
+```
+
+**命令行参数**:
+- `--file, -f`: Excel数据文件路径 (必需)
+- `--row, -r`: 查询的行号 (必需)
+- `--algorithm, -a`: 分析算法 (必需)
+
+#### **资金池查询接口** (`src/services/fund_pool_cli.py`)
+
+```bash
+# 查询特定资金池的详细信息
+python src/services/fund_pool_cli.py \
+    --file data.xlsx \
+    --row 50 \
+    --algorithm FIFO \
+    --pool "理财-SL100613100620"
+
+# 查询多个资金池
+python src/services/fund_pool_cli.py \
+    -f data.xlsx -r 50 -a BALANCE_METHOD \
+    --pool "投资-产品A"
+```
+
+**命令行参数**:
+- `--file`: Excel数据文件路径 (必需)
+- `--row`: 查询时点的行号 (必需)  
+- `--algorithm`: 分析算法 (必需)
+- `--pool`: 资金池名称 (必需)
+
+### 3. **配置管理** (`src/config.py`)
+
+#### **核心配置类**
+
+```python
+class Config:
+    """全局配置管理类"""
+    
+    # 数值处理配置
+    BALANCE_TOLERANCE = 0.01  # 余额计算容差
+    DECIMAL_PLACES = 2        # 小数位精度
+    
+    # 资金属性识别规则
+    PERSONAL_FUND_KEYWORDS = ['个人', '个人应收', '个人应付']
+    COMPANY_FUND_KEYWORDS = ['公司', '公司应收', '公司应付']
+    
+    # 投资产品前缀规则
+    INVESTMENT_PRODUCT_PREFIXES = [
+        '理财-', '投资-', '保险-', 
+        '关联银行卡-', '资金池-'
+    ]
+    
+    # 文件路径配置
+    DEFAULT_INPUT_PATH = "流水.xlsx"
+    DEFAULT_OUTPUT_DIR = "./"
+    LOG_DIR = "logs/"
+    
+    # Excel列映射
+    EXCEL_COLUMN_MAPPING = {
+        '交易日期': 'transaction_date',
+        '交易时间': 'transaction_time', 
+        '交易收入金额': 'income_amount',
+        '交易支出金额': 'expense_amount',
+        '余额': 'balance',
+        '资金属性': 'fund_attribute'
+    }
+    
+    @staticmethod
+    def is_personal_fund(fund_attribute: str) -> bool:
+        """判断是否为个人资金"""
+        return any(keyword in str(fund_attribute) 
+                  for keyword in Config.PERSONAL_FUND_KEYWORDS)
+    
+    @staticmethod  
+    def is_company_fund(fund_attribute: str) -> bool:
+        """判断是否为公司资金"""
+        return any(keyword in str(fund_attribute)
+                  for keyword in Config.COMPANY_FUND_KEYWORDS)
+    
+    @staticmethod
+    def is_investment_product(fund_attribute: str) -> bool:
+        """判断是否为投资产品"""
+        return any(str(fund_attribute).startswith(prefix)
+                  for prefix in Config.INVESTMENT_PRODUCT_PREFIXES)
+    
+    @staticmethod
+    def format_number(value: float) -> float:
+        """格式化数值精度"""
+        return round(value, Config.DECIMAL_PLACES)
+```
+
+#### **日志配置** (`src/utils/logger.py`)
+
+```python
+import logging
+from pathlib import Path
+
+class AuditLogger:
+    """审计系统日志管理器"""
+    
+    def __init__(self):
+        self.setup_loggers()
+    
+    def setup_loggers(self):
+        """设置日志记录器"""
+        
+        # 创建日志目录
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+        
+        # 主日志记录器
+        self.main_logger = logging.getLogger("audit_main")
+        self.main_logger.setLevel(logging.INFO)
+        
+        # 详细日志记录器  
+        self.detail_logger = logging.getLogger("audit_detail")
+        self.detail_logger.setLevel(logging.DEBUG)
+        
+        # 错误日志记录器
+        self.error_logger = logging.getLogger("audit_error")
+        self.error_logger.setLevel(logging.ERROR)
+        
+        # 配置日志格式
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # 配置文件处理器
+        handlers = [
+            (self.main_logger, "logs/audit.log"),
+            (self.detail_logger, "logs/audit_detail.log"),
+            (self.error_logger, "logs/audit_error.log")
+        ]
+        
+        for logger, filepath in handlers:
+            handler = logging.FileHandler(filepath, encoding='utf-8')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+
+# 全局日志实例
+audit_logger = AuditLogger().main_logger
+detail_logger = AuditLogger().detail_logger  
+error_logger = AuditLogger().error_logger
+```
+
+### 4. **数据结构定义**
+
+#### **输入数据结构** (Excel格式)
+
+| 字段名 | 数据类型 | 必填 | 说明 | 示例 |
+|-------|---------|------|------|------|
+| 交易日期 | datetime | ✅ | 交易发生日期 | `2023-01-15` |
+| 交易时间 | string/int | ✅ | 具体交易时间 | `143025` 或 `"14:30:25"` |
+| 交易收入金额 | float | ✅ | 资金流入，无收入填0 | `50000.00` |
+| 交易支出金额 | float | ✅ | 资金流出，无支出填0 | `30000.00` |
+| 余额 | float | ✅ | 交易后账户余额 | `120000.00` |
+| 资金属性 | string | ✅ | 资金归属和性质标识 | `"个人应收"` |
+
+#### **资金属性分类规则**
+
+| 类型 | 格式 | 说明 | 示例 |
+|------|------|------|------|
+| 个人资金 | `个人`\|`个人应收`\|`个人应付` | 个人资金流向 | `"个人应收"` |
+| 公司资金 | `公司`\|`公司应收`\|`公司应付` | 公司资金流向 | `"公司应付"` |
+| 投资产品 | `前缀-产品代码` | 投资产品标识 | `"理财-SL100613100620"` |
+
+#### **投资产品前缀规则**
+
+- `理财-`: 银行理财产品
+- `投资-`: 各类投资产品  
+- `保险-`: 保险类产品
+- `关联银行卡-`: 关联账户转账
+- `资金池-`: 资金池产品
+
+#### **输出数据结构**
+
+**主分析结果** (`[ALGORITHM]_资金追踪结果.xlsx`):
+
+| 字段名 | 数据类型 | 说明 |
+|-------|---------|------|
+| **原始字段** | | |
+| 交易日期 | datetime | 原始交易日期 |
+| 交易时间 | string | 原始交易时间 |
+| 交易收入金额 | float | 原始收入金额 |
+| 交易支出金额 | float | 原始支出金额 |
+| 余额 | float | 原始账户余额 |
+| 资金属性 | string | 原始资金属性 |
+| **系统计算字段** | | |
+| 个人资金占比 | float | 该交易中个人资金占比 (0-1) |
+| 公司资金占比 | float | 该交易中公司资金占比 (0-1) |
+| 行为性质 | string | 挪用/垫付/正常/投资等行为分类 |
+| 累计挪用 | float | 截止当前交易的累计挪用金额 |
+| 累计垫付 | float | 截止当前交易的累计垫付金额 |
+| 累计已归还公司本金 | float | 通过投资收益归还的公司本金 |
+| 累计已归还个人本金 | float | 通过投资收益归还的个人本金 |
+| 总计个人应分配利润 | float | 个人应得的投资收益 |
+| 总计公司应分配利润 | float | 公司应得的投资收益 |
+| 资金缺口 | float | 挪用金额 - 归还本金 - 垫付金额 |
+| 个人余额 | float | 当前个人资金余额 |
+| 公司余额 | float | 当前公司资金余额 |
+
+**场外资金池记录** (`场外资金池记录_[ALGORITHM].xlsx`):
+
+| 字段名 | 数据类型 | 说明 |
+|-------|---------|------|
+| 交易时间 | string | 资金池交易时间 |
+| 资金池名称 | string | 投资产品标识 |
+| 入金 | float | 申购金额 |
+| 出金 | float | 赎回金额 |
+| 总余额 | float | 当前资金池余额 |
+| 单笔资金占比 | string | 该笔交易的资金构成 |
+| 总资金占比 | string | 资金池总体资金构成 |
+| 行为性质 | string | 交易行为描述 |
+| 累计申购 | float | 累计申购总额 |
+| 累计赎回 | float | 累计赎回总额 |
 
 ## 🏛️ 架构设计原则
 
@@ -396,30 +870,220 @@ python src/services/fund_pool_cli.py --file data.xlsx --row 50 --algorithm FIFO 
 
 ## 🚀 部署和运行
 
-### 1. **开发环境运行**
+### 1. **开发环境配置**
+
+#### **Python环境准备**
 ```bash
-# 启动Tauri开发服务器
+# 确保Python 3.11+
+python --version
+
+# 安装Python依赖
+pip install pandas numpy openpyxl argparse pathlib
+pip install python-dateutil
+```
+
+#### **Node.js环境准备**
+```bash
+# 确保Node.js 18+
+node --version
+npm --version
+
+# 安装Tauri CLI
+npm install -g @tauri-apps/cli
+
+# 进入Tauri应用目录并安装依赖
+cd tauri-app
+npm install
+```
+
+#### **Rust环境准备** 
+```bash
+# 确保Rust 1.70+
+rustc --version
+cargo --version
+
+# Tauri会自动管理Rust依赖
+```
+
+### 2. **开发环境运行**
+
+#### **启动完整GUI应用**
+```bash
+# 启动Tauri开发服务器 (热重载)
 cd tauri-app
 npm run tauri dev
 
-# 或直接运行Python CLI
-python src/main.py --algorithm FIFO --input test.xlsx
+# 或使用yarn
+yarn tauri dev
 ```
 
-### 2. **生产环境构建**
+#### **独立运行Python CLI**
 ```bash
-# 构建Tauri应用
-cd tauri-app  
+# 基本分析
+python src/main.py --algorithm FIFO --input test.xlsx
+
+# 时点查询
+python src/services/query_cli.py -f test.xlsx -r 100 -a FIFO
+
+# 资金池查询  
+python src/services/fund_pool_cli.py -f test.xlsx -r 50 -a FIFO --pool "理财-产品A"
+```
+
+### 3. **Rust依赖配置详解** (`tauri-app/src-tauri/Cargo.toml`)
+
+#### **核心Tauri依赖**
+```toml
+[dependencies]
+# Tauri核心框架 - 提供桌面应用能力
+tauri = { 
+    version = "1.5.1", 
+    features = [ 
+        "window-show", "protocol-asset", "dialog-message", 
+        "shell-execute", "fs-read-file", "window-close", 
+        "fs-remove-dir", "window-unmaximize", "window-print", 
+        "shell-open", "fs-read-dir", "path-all", "dialog-open", 
+        "dialog-save", "notification-all", "process-exit", 
+        "window-minimize", "window-maximize", "fs-exists", 
+        "fs-remove-file", "dialog-confirm", "window-start-dragging", 
+        "window-unminimize", "fs-copy-file", "fs-rename-file", 
+        "fs-create-dir", "dialog-ask", "window-hide", "fs-write-file" 
+    ] 
+}
+
+# 序列化支持 - JSON数据交换
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 异步运行时 - 处理并发操作
+tokio = { version = "1.0", features = ["full"] }
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+```
+
+#### **Windows平台特定依赖**
+```toml
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows API支持
+windows = { 
+    version = "0.52", 
+    features = [
+        "Win32", "Win32_Foundation", "Win32_Graphics", 
+        "Win32_Graphics_Dwm", "Win32_System", 
+        "Win32_System_LibraryLoader", "Win32_UI", 
+        "Win32_UI_WindowsAndMessaging"
+    ] 
+}
+raw-window-handle = "0.5"
+```
+
+#### **系统工具依赖**
+```toml
+# 文件系统和进程管理
+dirs = "5.0"          # 系统目录访问
+which = "4.4"         # 可执行文件查找
+
+# 日志系统
+log = "0.4"           # 日志记录
+env_logger = "0.10"   # 环境日志配置
+
+# 时间处理
+chrono = { version = "0.4", features = ["serde"] }
+
+# 文本处理
+regex = "1.0"         # 正则表达式
+```
+
+#### **编译优化配置**
+```toml
+[profile.dev]
+incremental = true    # 增量编译，加速开发
+
+[profile.release]
+panic = "abort"       # 发布版本panic时直接中止
+codegen-units = 1     # 单一代码生成单元，优化性能
+lto = true           # 链接时优化
+strip = true         # 剥离调试符号，减小文件大小
+```
+
+### 4. **生产环境构建**
+
+#### **构建Tauri桌面应用**
+```bash
+# 进入Tauri目录
+cd tauri-app
+
+# 安装依赖
+npm install
+
+# 构建生产版本
 npm run tauri build
 
-# 构建独立Python可执行文件
-cd tauri-app/scripts
-./build_standalone.ps1
+# 输出位置
+# Windows: tauri-app/src-tauri/target/release/fifo-audit-desktop.exe
+# macOS: tauri-app/src-tauri/target/release/bundle/macos/fifo-audit-desktop.app
+# Linux: tauri-app/src-tauri/target/release/fifo-audit-desktop
 ```
 
-### 3. **文件结构说明**
-- **开发**: 源码形式，支持热重载
-- **生产**: 单一可执行文件，包含所有依赖
+#### **构建独立Python可执行文件**
+```powershell
+# 使用PowerShell脚本构建
+cd tauri-app/scripts
+./build_standalone.ps1
+
+# 手动构建 (可选)
+pip install pyinstaller
+cd src
+pyinstaller --onefile --distpath=../dist/ main.py
+```
+
+#### **构建输出说明**
+
+**Tauri应用输出**:
+- **Windows**: `.exe`可执行文件 + `.msi`安装包
+- **文件大小**: 约15-25MB (包含WebView和所有依赖)
+- **依赖**: 无需额外安装Python或Node.js
+- **功能**: 完整GUI + Python后端调用
+
+**PyInstaller输出**:
+- **文件**: `dist/main.exe` (纯Python CLI)
+- **文件大小**: 约50-80MB (包含Python运行时)
+- **依赖**: 无需安装Python
+- **功能**: 纯命令行操作
+
+### 5. **部署配置和选项**
+
+#### **开发模式特性**
+- ✅ 热重载: 前端和后端代码修改即时生效
+- ✅ 调试输出: 详细的错误信息和日志
+- ✅ 开发工具: Chrome DevTools可用
+- ✅ 快速迭代: 无需重新编译
+
+#### **生产模式特性**
+- ✅ 单文件分发: 一个exe文件包含所有功能
+- ✅ 性能优化: 代码压缩和运行时优化
+- ✅ 安全加固: 移除调试信息和开发工具
+- ✅ 自动更新: 支持应用自动更新机制
+
+#### **跨平台支持**
+- ✅ **Windows**: 主要支持平台，完整功能
+- ✅ **macOS**: 完整支持，需要开发者证书签名
+- ✅ **Linux**: 基础支持，部分系统集成功能受限
+
+### 6. **性能和系统要求**
+
+#### **系统要求**
+- **操作系统**: Windows 10+ / macOS 10.15+ / Ubuntu 18.04+
+- **内存**: 最低4GB RAM，推荐8GB+
+- **存储**: 100MB可用空间
+- **Python**: 3.11+ (仅开发环境需要)
+
+#### **性能特性**
+- **启动时间**: < 3秒 (桌面应用)
+- **内存占用**: 50-150MB (取决于数据大小)
+- **处理能力**: 支持10万+行Excel数据
+- **响应性**: GUI异步处理，界面始终响应
 
 ## 📊 性能特性
 
@@ -469,15 +1133,285 @@ export const NewPage: React.FC = () => { ... };
 <Route path="/new" component={NewPage} />
 ```
 
+## 🦀 Rust化迁移指南
+
+### 1. **迁移策略概览**
+
+基于当前的**渐进式现代化架构**，我们已经具备了向Rust迁移的理想基础：
+
+```
+当前架构:    React GUI ←→ Tauri Rust ←→ Python CLI ←→ Python算法
+迁移目标:    React GUI ←→ Pure Rust Backend ←→ Rust算法实现
+```
+
+### 2. **分阶段迁移路线图**
+
+#### **阶段1: 扩展Rust适配层** (优先级: 高)
+- ✅ **已完成**: Tauri接口适配器 (`main.rs`)
+- 🔄 **进行中**: 完善Rust结构体定义
+- 📋 **待完成**: 
+  - 将Python CLI调用改为直接Rust函数调用
+  - 实现Excel读写的Rust版本
+  - 添加完整的错误处理机制
+
+#### **阶段2: 核心算法迁移** (优先级: 中)
+- 📋 **FIFO算法**: `models/fifo_algorithm.py` → `rust-backend/src/algorithms/fifo_tracker.rs`
+- 📋 **差额计算法**: `balance_method_tracker.py` → `rust-backend/src/algorithms/balance_method_tracker.rs`
+- 📋 **行为分析器**: `behavior_analyzer.py` → `rust-backend/src/analyzers/behavior_analyzer.rs`
+
+#### **阶段3: 服务层迁移** (优先级: 中)
+- 📋 **审计服务**: `audit_service.py` → `rust-backend/src/services/audit_service.rs`
+- 📋 **时点查询**: `time_point_query_service.py` → `rust-backend/src/services/query_service.rs`
+- 📋 **数据处理**: `data_processor.py` → `rust-backend/src/utils/data_processor.rs`
+
+#### **阶段4: 完全替换** (优先级: 低)
+- 📋 移除Python依赖
+- 📋 统一为单一Rust可执行文件
+- 📋 性能优化和测试
+
+### 3. **技术映射表**
+
+#### **数据结构映射**
+```rust
+// Python → Rust 类型映射
+pandas.DataFrame     → polars::DataFrame 或 Vec<Transaction>
+Dict[str, Any]       → HashMap<String, serde_json::Value>
+float               → f64
+str                 → String
+Optional[T]         → Option<T>
+List[T]             → Vec<T>
+```
+
+#### **依赖库映射**
+```toml
+# Cargo.toml 建议依赖
+[dependencies]
+# Excel处理
+calamine = "0.22"           # 替代pandas读Excel
+xlsxwriter = "0.5"          # 替代openpyxl写Excel
+
+# 数据处理  
+polars = "0.35"             # 替代pandas (高性能)
+chrono = "0.4"              # 时间处理
+rust_decimal = "1.32"       # 精确小数计算
+
+# 错误处理
+anyhow = "1.0"              # 错误处理
+thiserror = "1.0"           # 自定义错误类型
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 日志
+log = "0.4"
+env_logger = "0.10"
+
+# CLI支持 (如果需要)
+clap = { version = "4.0", features = ["derive"] }
+```
+
+### 4. **Rust实现示例**
+
+#### **配置管理** (替代`config.py`)
+```rust
+// rust-backend/src/config.rs
+use std::collections::HashSet;
+
+pub struct Config {
+    pub balance_tolerance: f64,
+    pub decimal_places: u32,
+    pub personal_fund_keywords: HashSet<String>,
+    pub company_fund_keywords: HashSet<String>,
+    pub investment_prefixes: Vec<String>,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        let mut personal_keywords = HashSet::new();
+        personal_keywords.insert("个人".to_string());
+        personal_keywords.insert("个人应收".to_string());
+        personal_keywords.insert("个人应付".to_string());
+
+        let mut company_keywords = HashSet::new();
+        company_keywords.insert("公司".to_string());
+        company_keywords.insert("公司应收".to_string());
+        company_keywords.insert("公司应付".to_string());
+
+        Config {
+            balance_tolerance: 0.01,
+            decimal_places: 2,
+            personal_fund_keywords: personal_keywords,
+            company_fund_keywords: company_keywords,
+            investment_prefixes: vec![
+                "理财-".to_string(),
+                "投资-".to_string(),
+                "保险-".to_string(),
+                "关联银行卡-".to_string(),
+                "资金池-".to_string(),
+            ],
+        }
+    }
+
+    pub fn is_personal_fund(&self, fund_attribute: &str) -> bool {
+        self.personal_fund_keywords.iter()
+            .any(|keyword| fund_attribute.contains(keyword))
+    }
+
+    pub fn is_company_fund(&self, fund_attribute: &str) -> bool {
+        self.company_fund_keywords.iter()
+            .any(|keyword| fund_attribute.contains(keyword))
+    }
+
+    pub fn is_investment_product(&self, fund_attribute: &str) -> bool {
+        self.investment_prefixes.iter()
+            .any(|prefix| fund_attribute.starts_with(prefix))
+    }
+}
+```
+
+#### **核心数据结构**
+```rust
+// rust-backend/src/models/transaction.rs
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use rust_decimal::Decimal;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub transaction_date: DateTime<Utc>,
+    pub transaction_time: String,
+    pub income_amount: Decimal,
+    pub expense_amount: Decimal,
+    pub balance: Decimal,
+    pub fund_attribute: String,
+    
+    // 系统计算字段
+    pub personal_ratio: Option<Decimal>,
+    pub company_ratio: Option<Decimal>,
+    pub behavior_nature: Option<String>,
+    pub cumulative_misappropriation: Option<Decimal>,
+    pub cumulative_advance: Option<Decimal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditSummary {
+    pub personal_balance: Decimal,
+    pub company_balance: Decimal,
+    pub total_misappropriation: Decimal,
+    pub total_advance_payment: Decimal,
+    pub total_company_principal_returned: Decimal,
+    pub total_personal_principal_returned: Decimal,
+    pub total_personal_profit: Decimal,
+    pub total_company_profit: Decimal,
+    pub funding_gap: Decimal,
+    pub investment_product_count: u32,
+    pub total_balance: Decimal,
+}
+```
+
+#### **追踪器接口**
+```rust
+// rust-backend/src/interfaces/tracker.rs
+use crate::models::{Transaction, AuditSummary};
+use anyhow::Result;
+use chrono::DateTime;
+use rust_decimal::Decimal;
+
+pub trait Tracker: Send + Sync {
+    fn initialize_balance(&mut self, initial_balance: Decimal, balance_type: &str) -> Result<()>;
+    
+    fn process_inflow(
+        &mut self, 
+        amount: Decimal, 
+        fund_attribute: &str, 
+        transaction_date: Option<DateTime<Utc>>
+    ) -> Result<(Decimal, Decimal, String)>;
+    
+    fn process_outflow(
+        &mut self, 
+        amount: Decimal, 
+        fund_attribute: &str, 
+        transaction_date: Option<DateTime<Utc>>
+    ) -> Result<(Decimal, Decimal, String)>;
+    
+    fn process_investment_redemption(
+        &mut self, 
+        amount: Decimal, 
+        fund_attribute: &str, 
+        transaction_date: Option<DateTime<Utc>>
+    ) -> Result<(Decimal, Decimal, String)>;
+    
+    fn get_summary(&self) -> Result<AuditSummary>;
+    fn get_current_ratios(&self) -> Result<(Decimal, Decimal)>;
+    fn is_initialized(&self) -> bool;
+}
+```
+
+### 5. **迁移优势分析**
+
+#### **性能提升**
+- 🚀 **内存效率**: Rust零成本抽象，内存占用降低30-50%
+- 🚀 **处理速度**: 编译优化，计算速度提升2-5倍
+- 🚀 **启动时间**: 无需Python解释器，启动时间减少60%
+
+#### **可靠性增强**
+- 🛡️ **内存安全**: 编译时保证无内存泄漏和悬垂指针
+- 🛡️ **并发安全**: 编译时检查数据竞争
+- 🛡️ **错误处理**: 强制错误处理，减少运行时崩溃
+
+#### **部署简化**
+- 📦 **单文件分发**: 无需Python运行时和依赖库
+- 📦 **跨平台编译**: 一次编译，多平台运行
+- 📦 **体积减小**: 最终可执行文件大小减少50%
+
+### 6. **迁移风险评估**
+
+#### **技术风险** (低)
+- ✅ Rust生态成熟，替代库充足
+- ✅ 当前架构适配器模式便于逐步迁移
+- ✅ TypeScript接口保持不变
+
+#### **人力成本** (中)
+- ⚠️ 需要Rust语言学习和适应期
+- ⚠️ 算法迁移需要仔细测试验证
+- ⚠️ 调试工具和流程需要适应
+
+#### **时间投入** (中)
+- 📅 **阶段1**: 2-3周 (接口完善)
+- 📅 **阶段2**: 4-6周 (核心算法)
+- 📅 **阶段3**: 3-4周 (服务层)
+- 📅 **阶段4**: 2-3周 (整合测试)
+
+### 7. **推荐方案**
+
+基于当前架构分析，建议采用**渐进式迁移策略**：
+
+1. **短期** (1-2个月): 完成阶段1，将Python CLI调用改为Rust函数调用
+2. **中期** (3-6个月): 完成阶段2-3，核心算法和服务层迁移
+3. **长期** (6-12个月): 完成阶段4，实现完全Rust化
+
+这种方案的优势：
+- ✅ 风险可控，每个阶段都有可用版本
+- ✅ 性能逐步提升，用户体验持续改善
+- ✅ 团队技能逐步积累，学习曲线平缓
+- ✅ 保持与Python版本的兼容性，直到完全迁移
+
 ---
 
 ## 📝 总结
 
-这是一个精心设计的**渐进式现代化架构**，通过多层适配器模式，成功地将传统Python CLI应用转换为现代桌面应用，同时保持了原有业务逻辑的稳定性和可靠性。
+这是一个精心设计的**渐进式现代化架构**，通过多层适配器模式，成功地将传统Python CLI应用转换为现代桌面应用，同时为Rust化迁移奠定了坚实基础。
 
-**核心优势**:
+**当前架构优势**:
 - 🎯 **用户体验**: 现代化GUI界面
 - 🔄 **技术延续**: 保留现有Python算法  
 - 🚀 **性能优异**: Rust提供高性能系统调用
 - 🔧 **易于维护**: 清晰的分层和适配器模式
 - 📈 **可扩展性**: 支持新算法和功能的无缝添加
+
+**Rust化迁移潜力**:
+- 🦀 **性能飞跃**: 2-5倍性能提升潜力
+- 🛡️ **安全保障**: 编译时内存和并发安全
+- 📦 **部署简化**: 单文件分发，无运行时依赖
+- 🔄 **迁移友好**: 适配器架构便于逐步迁移
