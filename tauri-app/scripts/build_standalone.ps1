@@ -80,7 +80,7 @@ try {
 block_cipher = None
 
 a = Analysis(
-    ['main_new.py'],
+    ['main.py'],
     pathex=['$SRC_DIR'],
     binaries=[],
     datas=[

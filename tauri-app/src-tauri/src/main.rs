@@ -203,7 +203,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     
     // 构建Python脚本路径
     let project_root = get_project_root()?;
-    let script_path = project_root.join("src").join("main_new.py");
+    let script_path = project_root.join("src").join("main.py");
     
     // 步骤3: 准备命令
     {
@@ -822,7 +822,7 @@ fn get_project_root() -> Result<PathBuf, String> {
     
     // 尝试找到项目根目录（包含src目录的目录）
     for _ in 0..5 { // 最多向上查找5级
-        if path.join("src").join("main_new.py").exists() {
+        if path.join("src").join("main.py").exists() {
             return Ok(path);
         }
         if let Some(parent) = path.parent() {

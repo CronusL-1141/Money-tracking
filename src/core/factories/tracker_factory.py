@@ -5,7 +5,7 @@
 
 from typing import List
 from core.interfaces.tracker_interface import ITracker
-from core.trackers.fifo_tracker import FIFOTracker
+from core.trackers.fifo_adapter import FIFOTracker
 from core.trackers.balance_method_tracker import BalanceMethodTracker
 
 
