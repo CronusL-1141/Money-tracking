@@ -137,7 +137,7 @@ def compare_algorithms(input_file: str) -> None:
                     "已归还个人本金": tracker.累计由资金池回归个人余额本金,
                     "个人利润": tracker.总计个人应分配利润,
                     "公司利润": tracker.总计公司应分配利润,
-                    "资金缺口": (tracker.累计挪用金额 - tracker.累计由资金池回归公司余额本金)
+                    "资金缺口": (tracker.累计挪用金额 - tracker.累计由资金池回归公司余额本金 - tracker.累计垫付金额)
                 }
                 print(f"✅ {algorithm} 算法完成")
             else:

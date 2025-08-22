@@ -255,9 +255,10 @@ class AuditService:
         df.iloc[row_idx, df.columns.get_loc('公司余额')] = self.tracker.公司余额
         df.iloc[row_idx, df.columns.get_loc('总余额')] = self.tracker.个人余额 + self.tracker.公司余额
         
-        # 计算资金缺口：累计挪用 - 累计归还给公司的本金
+        # 计算资金缺口：累计挪用 - 累计归还给公司的本金 - 累计垫付
         资金缺口 = (self.tracker.累计挪用金额 - 
-                   self.tracker.累计由资金池回归公司余额本金)
+                   self.tracker.累计由资金池回归公司余额本金 - 
+                   self.tracker.累计垫付金额)
         df.iloc[row_idx, df.columns.get_loc('资金缺口')] = 资金缺口
     
     def _generate_analysis_results(self, df: pd.DataFrame) -> None:
@@ -286,19 +287,20 @@ class AuditService:
         audit_logger.info(f"总计个人应分配利润: {self.tracker.总计个人应分配利润:,.2f}")
         audit_logger.info(f"总计公司应分配利润: {self.tracker.总计公司应分配利润:,.2f}")
         
-        # 计算资金缺口：累计挪用 - 累计归还给公司的本金
+        # 计算资金缺口：累计挪用 - 累计归还给公司的本金 - 累计垫付
         资金缺口 = (self.tracker.累计挪用金额 - 
-                   self.tracker.累计由资金池回归公司余额本金)
+                   self.tracker.累计由资金池回归公司余额本金 - 
+                   self.tracker.累计垫付金额)
         
         audit_logger.info(f"汇总:")
         audit_logger.info(f"个人累计挪用: {self.tracker.累计挪用金额:,.2f}")
         audit_logger.info(f"公司累计垫付: {self.tracker.累计垫付金额:,.2f}")
-        audit_logger.info(f"资金缺口: {资金缺口:,.2f} （挪用{self.tracker.累计挪用金额:,.2f} - 公司归还{self.tracker.累计由资金池回归公司余额本金:,.2f}）")
+        audit_logger.info(f"资金缺口: {资金缺口:,.2f} （挪用{self.tracker.累计挪用金额:,.2f} - 公司归还{self.tracker.累计由资金池回归公司余额本金:,.2f} - 垫付{self.tracker.累计垫付金额:,.2f}）")
         
         # 算法特定信息
         if self.algorithm == "BALANCE_METHOD":
             audit_logger.info(f"差额计算法特有指标:")
-            audit_logger.info(f"资金缺口（扣除公司归还）: {self.tracker.累计挪用金额 - self.tracker.累计由资金池回归公司余额本金:,.2f}")
+            audit_logger.info(f"资金缺口（扣除公司归还和垫付）: {self.tracker.累计挪用金额 - self.tracker.累计由资金池回归公司余额本金 - self.tracker.累计垫付金额:,.2f}")
     
     def _save_error_report(self, validation_result: Dict, error_report_file: str) -> None:
         """保存验证错误报告 - 复用main.py逻辑"""

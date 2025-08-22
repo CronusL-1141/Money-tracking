@@ -250,14 +250,15 @@ class FIFO资金追踪分析器:
         audit_logger.info(f"总计个人应分配利润: {self.tracker.总计个人应分配利润:,.2f}")
         audit_logger.info(f"总计公司应分配利润: {self.tracker.总计公司应分配利润:,.2f}")
         
-        # 计算资金缺口：累计挪用 - 累计归还给公司的本金
+        # 计算资金缺口：累计挪用 - 累计归还给公司的本金 - 累计垫付
         资金缺口 = (self.tracker.累计挪用金额 - 
-                   self.tracker.累计由资金池回归公司余额本金)
+                   self.tracker.累计由资金池回归公司余额本金 - 
+                   self.tracker.累计垫付金额)
         
         audit_logger.info(f"汇总:")
         audit_logger.info(f"个人累计挪用: {self.tracker.累计挪用金额:,.2f}")
         audit_logger.info(f"公司累计垫付: {self.tracker.累计垫付金额:,.2f}")
-        audit_logger.info(f"资金缺口: {资金缺口:,.2f} （挪用{self.tracker.累计挪用金额:,.2f} - 公司归还{self.tracker.累计由资金池回归公司余额本金:,.2f}）")
+        audit_logger.info(f"资金缺口: {资金缺口:,.2f} （挪用{self.tracker.累计挪用金额:,.2f} - 公司归还{self.tracker.累计由资金池回归公司余额本金:,.2f} - 垫付{self.tracker.累计垫付金额:,.2f}）")
         
         # 投资产品明细表 - 已移至单独Excel文件
         # self._show_investment_products()

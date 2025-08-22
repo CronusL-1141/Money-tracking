@@ -492,7 +492,7 @@ class DebugTracker:
         self.data.at[idx, '总余额'] = self.tracker.个人余额 + self.tracker.公司余额
         
         # 计算资金缺口
-        资金缺口 = self.tracker.累计挪用金额 - self.tracker.累计由资金池回归公司余额本金
+        资金缺口 = self.tracker.累计挪用金额 - self.tracker.累计由资金池回归公司余额本金 - self.tracker.累计垫付金额
         self.data.at[idx, '资金缺口'] = 资金缺口
     
     def show_status(self):
