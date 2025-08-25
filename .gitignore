@@ -84,3 +84,9 @@ config/personal/
 
 # Claude Code配置文件
 .claude/
+# 大文件和压缩包
+*.zip
+*.rar  
+*.7z
+Portal.zip
+**/target/
