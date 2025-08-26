@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **涉案资金追踪分析系统** - 司法审计工具，用于检测公款挪用、职务侵占等经济犯罪行为。
 
-### 当前状态（2024年8月23日）
+### 当前状态（2025年8月26日深夜）
 - **生产版本**: Python v3.1.0 - 功能完整且稳定运行中
-- **开发中**: Rust后端迁移项目 - 工具层完成，**专注算法层逐层完善**
-- **GUI状态**: Tauri应用通过Shell调用Python CLI，尚未集成Rust后端
-- **开发重点**: 基础→工具→算法 三层逐层完善，不急于实现应用层
+- **开发版本**: Rust后端 v3.2.1 - **投资池逻辑分析完成，算法验证就绪**
+- **重大发现**: Python差额计算法投资池逻辑错误，Rust实现采用正确累计占比逻辑
+- **GUI状态**: Tauri应用通过Shell调用Python CLI，准备集成Rust后端
+- **开发重点**: Python差额计算法修复 → 算法一致性验证 → 服务层集成
 
 ### 技术栈
 - **当前生产**: Python 3.11+ (CLI) + Tauri (Rust壳 + React前端，调用Python)
@@ -118,32 +119,50 @@ Excel文件 → Rust(calamine读取) → 数据验证修复 → 算法处理 →
 
 ## Rust迁移状态（rust-backend分支）
 
-### 当前进度 - 逐层完善阶段
+### v3.2.1 当前进度 - 投资池逻辑分析完成阶段
 
 #### ✅ 基础层（已完成）
 - ✅ 核心数据结构（Transaction, Config, AuditSummary）
 - ✅ 错误处理系统（AuditError with thiserror）
 - ✅ 库编译成功
+- ✅ 目录结构优化：`models` → `data_models`
 
 #### ✅ 工具层（已完成）
-- ✅ Excel处理模块（ExcelProcessor - 统一读写功能）
+- ✅ Excel处理模块（ExcelProcessor - 统一读写功能，暂时禁用）
 - ✅ 统一数据验证器（UnifiedValidator - 流水完整性验证和修复）
 - ✅ 时间处理器（TimeProcessor - 时间解析和格式化）
 - ✅ 日志系统（AuditLogger - 结构化日志）
 - ✅ 数据不变性原则修复（确保源数据只读）
 
-#### 🔄 算法层（当前重点）
-- 🔄 FIFO算法完善（核心逻辑已有，需完善细节）
-- 🔄 BalanceMethod算法完善（核心逻辑已有，需完善细节）
-- ⏳ FlowAnalyzer重新设计（功能分离）
-- ⏳ TrackerFactory实现（算法工厂）
-- ⏳ 算法层集成测试
-- ⏳ 与Python版本结果对比验证
+#### ✅ 算法层（v3.2.0已完成）
+- ✅ 共享架构设计（90%代码复用成功）
+- ✅ TrackerBase共享基础类（13个状态变量）
+- ✅ BehaviorAnalyzer行为分析器（345行）
+- ✅ InvestmentPoolManager投资管理器（372行）
+- ✅ FundFlowCommon共同资金流处理（443行）
+- ✅ SummaryGenerator摘要生成器（297行）
+- ✅ FIFO算法完整实现
+- ✅ BalanceMethod算法完整实现
+- ✅ 编译零错误通过
 
-#### ⏸️ 暂缓的层次（等算法层完成后）
-- **服务层**（AuditService等） - 为GUI交互设计，当前阶段不需要
-- **应用层**（CLI/GUI） - 依赖算法层完成
-- **Tauri集成** - 依赖服务层完成
+#### ✅ 测试体系（v3.2.0已建立）
+- ✅ 统一测试目录：`independent_tests/`
+- ✅ 算法验证框架：基础构造功能验证成功
+- ✅ 预处理验证：100%与Python结果一致
+- 🔄 完整算法验证：待启用完整测试
+- ⏳ 性能基准测试：计划中
+
+#### ✅ 投资池逻辑分析（v3.2.1新完成）
+- ✅ **重大发现**：Python差额计算法投资池逻辑错误
+- ✅ **验证结论**：Rust实现采用正确的累计占比逻辑（与FIFO一致）
+- ✅ **根本原因**：差额计算法使用单次申购占比，FIFO使用累计占比
+- ✅ **案例验证**："关联银行卡-WWJ" Rust结果正确 (18.09%:81.91%)
+
+#### 🔄 下一阶段重点
+- **Python差额计算法修复** - 统一投资池占比计算逻辑至累计占比
+- **算法一致性验证** - 确认修复后两算法结果一致
+- **基准数据重生成** - 基于正确逻辑重新生成验证数据
+- **工具层集成** - 重新启用ExcelProcessor支持端到端测试
 
 ## 核心设计原则
 

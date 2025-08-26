@@ -3,7 +3,7 @@
 //! 处理投资产品的申购、赎回等业务逻辑，可被FIFO和差额计算法复用
 
 use crate::errors::{AuditError, AuditResult};
-use crate::models::{Config, investment::{InvestmentPool, InvestmentTransactionRecord, ProfitRecord, RedemptionResult}};
+use crate::data_models::{Config, investment::{InvestmentPool, InvestmentTransactionRecord, ProfitRecord, RedemptionResult}};
 use rust_decimal::Decimal;
 use chrono::NaiveDateTime;
 use std::collections::HashMap;

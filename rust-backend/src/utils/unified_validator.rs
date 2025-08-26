@@ -8,7 +8,7 @@
 /// 
 /// 移除功能: 大额交易验证、日期范围验证(用户明确要求移除)
 
-use crate::models::Transaction;
+use crate::data_models::Transaction;
 use crate::errors::{AuditError, AuditResult};
 use crate::utils::logger::AuditLogger;
 use rust_decimal::Decimal;

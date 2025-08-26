@@ -3,7 +3,7 @@
 //! 提供与Tauri前端的集成接口
 
 use crate::services::AuditService;
-use crate::models::AuditSummary;
+use crate::data_models::AuditSummary;
 use crate::errors::{AuditError, AuditResult};
 use serde::{Deserialize, Serialize};
 use log::{info, error};

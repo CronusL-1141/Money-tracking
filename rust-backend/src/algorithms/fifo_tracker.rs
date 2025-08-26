@@ -1,7 +1,12 @@
 //! FIFO资金追踪器实现
+//!
+//! 基于新共享架构实现，使用TrackerBase作为基础状态管理
+//! 对应Python版本的FIFO资金追踪器完整功能
 
-use crate::interfaces::Tracker;
-use crate::models::{Config, AuditSummary};
+use super::shared::{
+    TrackerBase, BehaviorAnalyzer, InvestmentPoolManager, FundFlowCommon, SummaryGenerator
+};
+use crate::data_models::{Config, AuditSummary, Transaction};
 use crate::errors::{AuditError, AuditResult};
 use chrono::NaiveDateTime;
 use rust_decimal::Decimal;
@@ -9,114 +14,115 @@ use std::collections::VecDeque;
 
 /// FIFO资金追踪器
 /// 
-/// 实现先进先出的资金追踪算法
+/// 基于共享架构实现先进先出的资金追踪算法
+/// 对应Python版本的FIFO资金追踪器
 #[derive(Debug, Clone)]
 pub struct FifoTracker {
-    config: Config,
-    initialized: bool,
+    /// 共享基础状态（13个状态变量）
+    base: TrackerBase,
+    /// 行为分析器（挪用垫付分析）
+    behavior_analyzer: BehaviorAnalyzer,
     
-    // 核心状态
-    personal_balance: Decimal,
-    company_balance: Decimal,
-    
-    // 统计信息
-    total_misappropriation: Decimal,
-    total_advance_payment: Decimal,
-    total_company_principal_returned: Decimal,
-    total_personal_principal_returned: Decimal,
-    total_personal_profit: Decimal,
-    total_company_profit: Decimal,
-    investment_product_count: u32,
-    
-    // FIFO队列（简化实现）
-    fund_queue: VecDeque<FundEntry>,
+    // === FIFO特有的数据结构 ===
+    /// 资金流入队列 - 对应Python版本的deque结构
+    /// 元素格式: (金额, 类型, 时间)
+    fund_inflow_queue: VecDeque<FundEntry>,
 }
 
 /// 资金条目（FIFO队列中的元素）
+/// 对应Python版本的(金额, 类型, 时间)元组结构
 #[derive(Debug, Clone)]
 struct FundEntry {
+    /// 资金金额
     amount: Decimal,
-    fund_type: FundType,
+    /// 资金类型（"个人" 或 "公司"）
+    fund_type: String,
+    /// 流入时间
     entry_time: Option<NaiveDateTime>,
-}
-
-/// 资金类型
-#[derive(Debug, Clone, PartialEq)]
-enum FundType {
-    Personal,
-    Company,
 }
 
 impl FifoTracker {
     /// 创建新的FIFO追踪器
+    /// 对应Python版本的__init__方法
     pub fn new(config: Config) -> Self {
         Self {
-            config,
-            initialized: false,
-            personal_balance: Decimal::ZERO,
-            company_balance: Decimal::ZERO,
-            total_misappropriation: Decimal::ZERO,
-            total_advance_payment: Decimal::ZERO,
-            total_company_principal_returned: Decimal::ZERO,
-            total_personal_principal_returned: Decimal::ZERO,
-            total_personal_profit: Decimal::ZERO,
-            total_company_profit: Decimal::ZERO,
-            investment_product_count: 0,
-            fund_queue: VecDeque::new(),
+            base: TrackerBase::new(config),
+            behavior_analyzer: BehaviorAnalyzer::new(),
+            fund_inflow_queue: VecDeque::new(),
         }
     }
     
-    /// 计算资金缺口
-    fn calculate_funding_gap(&self) -> Decimal {
-        self.total_misappropriation 
-            - self.total_company_principal_returned
-            - self.total_advance_payment
-    }
-    
-    /// 处理个人资金流入
-    fn process_personal_inflow(&mut self, amount: Decimal, date: Option<NaiveDateTime>) {
-        self.personal_balance += amount;
+    /// 初始化余额
+    /// 对应Python版本的初始化余额处理
+    pub fn initialize_balance(&mut self, initial_balance: Decimal, balance_type: &str) -> AuditResult<()> {
+        // 使用基础类初始化
+        self.base.initialize_balance(initial_balance, balance_type)?;
         
         // 添加到FIFO队列
-        self.fund_queue.push_back(FundEntry {
-            amount,
-            fund_type: FundType::Personal,
-            entry_time: date,
+        self.fund_inflow_queue.push_back(FundEntry {
+            amount: initial_balance,
+            fund_type: balance_type.to_string(),
+            entry_time: None,
         });
-    }
-    
-    /// 处理公司资金流入
-    fn process_company_inflow(&mut self, amount: Decimal, date: Option<NaiveDateTime>) {
-        self.company_balance += amount;
         
-        // 添加到FIFO队列
-        self.fund_queue.push_back(FundEntry {
-            amount,
-            fund_type: FundType::Company,
-            entry_time: date,
-        });
+        Ok(())
     }
     
-    /// 处理资金流出（FIFO方式）
-    fn process_fifo_outflow(&mut self, amount: Decimal) -> (Decimal, Decimal, String) {
+    /// 处理资金流入
+    /// 对应Python版本的处理资金流入方法
+    pub fn process_inflow(
+        &mut self,
+        amount: Decimal,
+        fund_attribute: &str,
+        transaction_date: Option<NaiveDateTime>,
+    ) -> AuditResult<(Decimal, Decimal, String)> {
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
+        }
+        
+        // 使用共同资金流处理逻辑
+        let (personal_ratio, company_ratio, behavior) = FundFlowCommon::process_fund_inflow(
+            &mut self.base,
+            amount,
+            fund_attribute,
+            transaction_date,
+        );
+        
+        // 添加到FIFO队列（按实际分配金额）
+        if personal_ratio > Decimal::ZERO {
+            self.fund_inflow_queue.push_back(FundEntry {
+                amount: amount * personal_ratio,
+                fund_type: "个人".to_string(),
+                entry_time: transaction_date,
+            });
+        }
+        if company_ratio > Decimal::ZERO {
+            self.fund_inflow_queue.push_back(FundEntry {
+                amount: amount * company_ratio,
+                fund_type: "公司".to_string(),
+                entry_time: transaction_date,
+            });
+        }
+        
+        Ok((personal_ratio, company_ratio, behavior))
+    }
+    
+    /// FIFO资金扣除函数
+    /// 对应Python版本的FIFO队列扣除逻辑
+    fn fifo_deduction(&mut self, amount: Decimal) -> (Decimal, Decimal) {
         let mut remaining_amount = amount;
-        let mut personal_used = Decimal::ZERO;
-        let mut company_used = Decimal::ZERO;
+        let mut personal_deducted = Decimal::ZERO;
+        let mut company_deducted = Decimal::ZERO;
         
         // 从队列前端开始消费资金
-        while remaining_amount > Decimal::ZERO && !self.fund_queue.is_empty() {
-            if let Some(mut entry) = self.fund_queue.pop_front() {
+        while remaining_amount > Decimal::ZERO && !self.fund_inflow_queue.is_empty() {
+            if let Some(mut entry) = self.fund_inflow_queue.pop_front() {
                 let used_amount = remaining_amount.min(entry.amount);
                 
-                match entry.fund_type {
-                    FundType::Personal => {
-                        personal_used += used_amount;
-                        self.personal_balance -= used_amount;
-                    }
-                    FundType::Company => {
-                        company_used += used_amount;
-                        self.company_balance -= used_amount;
-                    }
+                if self.base.config.is_personal_fund(&entry.fund_type) {
+                    personal_deducted += used_amount;
+                } else if self.base.config.is_company_fund(&entry.fund_type) {
+                    company_deducted += used_amount;
                 }
                 
                 remaining_amount -= used_amount;
@@ -124,181 +130,201 @@ impl FifoTracker {
                 // 如果条目还有剩余，放回队列前端
                 if entry.amount > used_amount {
                     entry.amount -= used_amount;
-                    self.fund_queue.push_front(entry);
+                    self.fund_inflow_queue.push_front(entry);
                 }
             } else {
                 break;
             }
         }
         
-        // 计算占比
-        let total_used = personal_used + company_used;
-        let (personal_ratio, company_ratio) = if total_used > Decimal::ZERO {
-            (personal_used / total_used, company_used / total_used)
-        } else {
-            (Decimal::ZERO, Decimal::ZERO)
-        };
+        // 更新基础余额
+        FundFlowCommon::update_balances_with_deduction(
+            &mut self.base,
+            personal_deducted,
+            company_deducted,
+        );
         
-        // 确定行为性质
-        let behavior = if personal_used > Decimal::ZERO && company_used > Decimal::ZERO {
-            "混合支出".to_string()
-        } else if personal_used > Decimal::ZERO {
-            "个人支出".to_string()
-        } else if company_used > Decimal::ZERO {
-            "公司支出".to_string()
-        } else {
-            "无效支出".to_string()
-        };
-        
-        (personal_ratio, company_ratio, behavior)
-    }
-}
-
-impl Tracker for FifoTracker {
-    fn initialize_balance(&mut self, initial_balance: Decimal, balance_type: &str) -> AuditResult<()> {
-        if self.config.is_personal_fund(balance_type) {
-            self.personal_balance = initial_balance;
-            self.fund_queue.push_back(FundEntry {
-                amount: initial_balance,
-                fund_type: FundType::Personal,
-                entry_time: None,
-            });
-        } else if self.config.is_company_fund(balance_type) {
-            self.company_balance = initial_balance;
-            self.fund_queue.push_back(FundEntry {
-                amount: initial_balance,
-                fund_type: FundType::Company,
-                entry_time: None,
-            });
-        } else {
-            return Err(AuditError::tracker_init_error(
-                format!("未知的余额类型: {}", balance_type)
-            ));
-        }
-        
-        self.initialized = true;
-        Ok(())
+        (personal_deducted, company_deducted)
     }
     
-    fn process_inflow(
+    /// 处理普通资金流出
+    /// 对应Python版本的普通支出处理逻辑
+    pub fn process_outflow(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
         transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        if self.config.is_personal_fund(fund_attribute) {
-            self.process_personal_inflow(amount, transaction_date);
-            Ok((Decimal::ONE, Decimal::ZERO, "个人收入".to_string()))
-        } else if self.config.is_company_fund(fund_attribute) {
-            self.process_company_inflow(amount, transaction_date);
-            Ok((Decimal::ZERO, Decimal::ONE, "公司收入".to_string()))
-        } else {
-            Err(AuditError::validation_error(
-                format!("未知的资金属性: {}", fund_attribute)
-            ))
-        }
+        // 使用FIFO扣除函数
+        let (personal_deduction, company_deduction) = self.fifo_deduction(amount);
+        
+        // 计算占比（基于原始金额）
+        let (personal_ratio, company_ratio) = FundFlowCommon::calculate_ratios(
+            personal_deduction,
+            company_deduction,
+            amount,
+        );
+        
+        // 分析行为性质
+        let behavior = FundFlowCommon::analyze_common_outflow_behavior(
+            &mut self.base,
+            &mut self.behavior_analyzer,
+            fund_attribute,
+            personal_deduction,
+            company_deduction,
+            amount,
+        );
+        
+        Ok((personal_ratio, company_ratio, behavior))
     }
-    
-    fn process_outflow(
+    /// 处理投资产品申购
+    /// 对应Python版本的投资产品申购逻辑
+    pub fn process_investment_purchase(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
         transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        let (personal_ratio, company_ratio, behavior) = self.process_fifo_outflow(amount);
+        // 使用共同投资处理逻辑，传入FIFO扣除函数
+        let result = FundFlowCommon::process_investment_purchase(
+            &mut self.base,
+            &self.behavior_analyzer,
+            amount,
+            fund_attribute,
+            transaction_date,
+            |base, amount| {
+                // FIFO扣除逻辑的闭包版本
+                let mut temp_tracker = FifoTracker {
+                    base: base.clone(),
+                    behavior_analyzer: BehaviorAnalyzer::new(),
+                    fund_inflow_queue: self.fund_inflow_queue.clone(),
+                };
+                let (personal, company) = temp_tracker.fifo_deduction(amount);
+                // 更新原始base状态
+                base.personal_balance = temp_tracker.base.personal_balance;
+                base.company_balance = temp_tracker.base.company_balance;
+                base.update_total_balance();
+                // 更新队列状态
+                self.fund_inflow_queue = temp_tracker.fund_inflow_queue;
+                (personal, company)
+            },
+        );
         
-        // 根据流出目标判断是否为挪用或垫付
-        let behavior_description = if self.config.is_personal_fund(fund_attribute) && company_ratio > Decimal::ZERO {
-            self.total_misappropriation += amount * company_ratio;
-            format!("挪用 - {}", behavior)
-        } else if self.config.is_company_fund(fund_attribute) && personal_ratio > Decimal::ZERO {
-            self.total_advance_payment += amount * personal_ratio;
-            format!("垫付 - {}", behavior)
-        } else {
-            behavior
-        };
-        
-        Ok((personal_ratio, company_ratio, behavior_description))
+        result.map_err(|e| AuditError::validation_error(e))
     }
     
-    fn process_investment_redemption(
+    /// 处理投资产品赎回
+    /// 对应Python版本的投资产品赎回逻辑
+    pub fn process_investment_redemption(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
-        _transaction_date: Option<NaiveDateTime>,
+        transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        // 投资赎回的处理逻辑
-        let (personal_ratio, company_ratio, _) = self.process_fifo_outflow(amount);
+        // 使用投资产品管理器处理赎回
+        let result = InvestmentPoolManager::process_investment_redemption(
+            &mut self.base,
+            fund_attribute,
+            amount,
+            transaction_date,
+        );
         
-        // 简化处理：假设赎回金额按原投资比例分配
-        if personal_ratio > Decimal::ZERO {
-            self.personal_balance += amount * personal_ratio;
-        }
-        if company_ratio > Decimal::ZERO {
-            self.company_balance += amount * company_ratio;
-        }
-        
-        self.investment_product_count += 1;
-        
-        Ok((personal_ratio, company_ratio, format!("投资赎回 - {}", fund_attribute)))
-    }
-    
-    fn get_summary(&self) -> AuditResult<AuditSummary> {
-        Ok(AuditSummary {
-            personal_balance: self.personal_balance,
-            company_balance: self.company_balance,
-            total_misappropriation: self.total_misappropriation,
-            total_advance_payment: self.total_advance_payment,
-            total_company_principal_returned: self.total_company_principal_returned,
-            total_personal_principal_returned: self.total_personal_principal_returned,
-            total_personal_profit: self.total_personal_profit,
-            total_company_profit: self.total_company_profit,
-            funding_gap: self.calculate_funding_gap(),
-            investment_product_count: self.investment_product_count,
-            total_balance: self.personal_balance + self.company_balance,
-        })
-    }
-    
-    fn get_current_ratios(&self) -> AuditResult<(Decimal, Decimal)> {
-        let total_balance = self.personal_balance + self.company_balance;
-        if total_balance > Decimal::ZERO {
-            Ok((
-                self.personal_balance / total_balance,
-                self.company_balance / total_balance,
-            ))
-        } else {
-            Ok((Decimal::ZERO, Decimal::ZERO))
+        match result {
+            Ok((personal_ratio, company_ratio, behavior)) => {
+                // 赎回金额重新进入FIFO队列
+                if personal_ratio > Decimal::ZERO {
+                    self.fund_inflow_queue.push_back(FundEntry {
+                        amount: amount * personal_ratio,
+                        fund_type: "个人".to_string(),
+                        entry_time: transaction_date,
+                    });
+                }
+                if company_ratio > Decimal::ZERO {
+                    self.fund_inflow_queue.push_back(FundEntry {
+                        amount: amount * company_ratio,
+                        fund_type: "公司".to_string(),
+                        entry_time: transaction_date,
+                    });
+                }
+                
+                Ok((personal_ratio, company_ratio, behavior))
+            }
+            Err(e) => Err(AuditError::validation_error(e)),
         }
     }
     
-    fn is_initialized(&self) -> bool {
-        self.initialized
+    /// 获取审计摘要
+    /// 对应Python版本的获取状态摘要方法
+    pub fn get_summary(&self) -> AuditResult<AuditSummary> {
+        Ok(SummaryGenerator::generate_audit_summary(&self.base))
     }
     
-    fn get_name(&self) -> &'static str {
+    /// 获取当前余额占比
+    pub fn get_current_ratios(&self) -> AuditResult<(Decimal, Decimal)> {
+        Ok(self.base.get_current_ratios())
+    }
+    
+    /// 检查是否已初始化
+    pub fn is_initialized(&self) -> bool {
+        self.base.is_initialized()
+    }
+    
+    /// 获取算法名称
+    pub fn get_name(&self) -> &'static str {
         "FIFO"
     }
     
-    fn get_description(&self) -> &'static str {
-        "先进先出算法 - 按时间顺序处理资金流动"
+    /// 获取算法描述
+    pub fn get_description(&self) -> &'static str {
+        "先进先出算法 - 按资金流入时间顺序进行扣除"
     }
     
-    fn reset(&mut self) -> AuditResult<()> {
-        *self = Self::new(self.config.clone());
+    /// 重置追踪器状态
+    pub fn reset(&mut self) -> AuditResult<()> {
+        self.base.reset();
+        self.behavior_analyzer = BehaviorAnalyzer::new();
+        self.fund_inflow_queue.clear();
         Ok(())
     }
+    
+    /// 生成详细的摘要文本
+    pub fn generate_detailed_summary_text(&self) -> String {
+        SummaryGenerator::generate_detailed_summary_text(&self.base, "FIFO")
+    }
+    
+    /// 获取FIFO队列状态（用于调试）
+    pub fn get_queue_info(&self) -> String {
+        if self.fund_inflow_queue.is_empty() {
+            "FIFO队列为空".to_string()
+        } else {
+            let mut info = Vec::new();
+            info.push(format!("FIFO队列长度: {}", self.fund_inflow_queue.len()));
+            for (i, entry) in self.fund_inflow_queue.iter().enumerate() {
+                info.push(format!(
+                    "  [{}] {}: ¥{:.2} ({})",
+                    i,
+                    entry.fund_type,
+                    entry.amount,
+                    entry.entry_time.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or("未知时间".to_string())
+                ));
+            }
+            info.join("\n")
+        }
+    }
+    
 }
 
 #[cfg(test)]
@@ -368,5 +394,56 @@ mod tests {
         // 应该优先使用个人资金（FIFO）
         assert!(personal_ratio > Decimal::ZERO);
         assert!(behavior.contains("个人支出") || behavior.contains("挪用"));
+    }
+}
+
+/// FIFO资金追踪器的公开接口
+/// 
+/// 提供与其他组件集成的API
+impl FifoTracker {
+    /// 获取内部状态（供测试和调试使用）
+    #[cfg(test)]
+    pub fn get_internal_state(&self) -> (&TrackerBase, &BehaviorAnalyzer, &VecDeque<FundEntry>) {
+        (&self.base, &self.behavior_analyzer, &self.fund_inflow_queue)
+    }
+    
+    /// 更新交易记录的所有计算字段
+    /// 
+    /// 这个方法将当前追踪器的状态同步到Transaction结构中
+    pub fn update_transaction_fields(
+        &self,
+        transaction: &mut Transaction,
+        personal_ratio: Decimal,
+        company_ratio: Decimal,
+        behavior: &str,
+    ) -> AuditResult<()> {
+        // 获取当前摘要状态
+        let summary = self.get_summary()?;
+        
+        // 更新算法计算字段
+        transaction.personal_ratio = Some(personal_ratio);
+        transaction.company_ratio = Some(company_ratio);
+        transaction.behavior_nature = Some(behavior.to_string());
+        
+        // 更新累计字段
+        transaction.cumulative_misappropriation = Some(summary.total_misappropriation);
+        transaction.cumulative_advance = Some(summary.total_advance_payment);
+        transaction.cumulative_company_principal_returned = Some(summary.total_company_principal_returned);
+        transaction.cumulative_personal_principal_returned = Some(summary.total_personal_principal_returned);
+        transaction.cumulative_personal_profit = Some(summary.total_personal_profit);
+        transaction.cumulative_company_profit = Some(summary.total_company_profit);
+        
+        // 更新余额字段
+        transaction.personal_balance = Some(summary.personal_balance);
+        transaction.company_balance = Some(summary.company_balance);
+        transaction.funding_gap = Some(summary.funding_gap);
+        
+        // 修复时间戳格式问题：确保完整的日期时间格式
+        if !transaction.transaction_time.contains('/') && !transaction.transaction_time.contains('-') {
+            // 如果transaction_time只是时间部分，合并日期和时间
+            transaction.transaction_time = transaction.transaction_date.format("%Y/%m/%d %H:%M:%S").to_string();
+        }
+        
+        Ok(())
     }
 }

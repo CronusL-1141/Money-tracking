@@ -4,7 +4,7 @@
 //! 提供完整的Excel读取、写入、数据解析和格式化功能。
 
 use crate::errors::{AuditError, AuditResult};
-use crate::models::{Transaction, AuditSummary, FundPoolRecord, Config};
+use crate::data_models::{Transaction, AuditSummary, FundPoolRecord, Config};
 use crate::utils::TimeProcessor;
 use calamine::{Reader, Xlsx, open_workbook, DataType};
 use chrono::NaiveDateTime;
@@ -13,7 +13,7 @@ use std::path::Path;
 use log::{info, warn, debug};
 
 // 使用rust_xlsxwriter进行Excel写入
-use rust_xlsxwriter::{Workbook, Worksheet, Format, Color, ExcelDateTime};
+use rust_xlsxwriter::{Workbook, Worksheet, Format, Color};
 
 /// Excel处理器
 /// 
@@ -203,8 +203,11 @@ impl ExcelProcessor {
             return Err(AuditError::validation_error("资金属性不能为空"));
         }
         
+        // 创建完整的时间戳（日期+时间）
+        let complete_timestamp = TimeProcessor::create_complete_timestamp(transaction_date, &transaction_time);
+        
         Ok(Transaction::new(
-            transaction_date,
+            complete_timestamp,
             transaction_time,
             income_amount,
             expense_amount,
@@ -316,14 +319,14 @@ impl ExcelProcessor {
     /// Python来源: src/utils/data_processor.py 结果DataFrame的列名
     fn write_excel_headers(&self, worksheet: &mut Worksheet, format: &Format) -> AuditResult<()> {
         let headers = [
-            "交易日期", "交易时间", "交易收入金额", "交易支出金额", "余额", "资金属性",
+            "交易时间", "交易收入金额", "交易支出金额", "余额", "资金属性",
             "个人资金占比", "公司资金占比", "行为性质", "累计挪用", "累计垫付",
             "累计已归还公司本金", "累计已归还个人本金", "总计个人应分配利润", 
             "总计公司应分配利润", "个人余额", "公司余额", "总余额", "资金缺口"
         ];
         
         for (col, header) in headers.iter().enumerate() {
-            worksheet.write_string_with_format(0, col as u16, *header, format)
+            worksheet.write_string(0, col as u16, *header)
                 .map_err(|e| AuditError::excel_error(format!("写入表头失败: {}", e)))?;
         }
         
@@ -343,56 +346,58 @@ impl ExcelProcessor {
             let row = (row_idx + 1) as u32; // 跳过表头行
             
             // Python来源: 对应DataFrame各列的数据写入
-            // 写入基础数据
-            worksheet.write_datetime_with_format(row, 0, ExcelDateTime::from_timestamp(tx.transaction_date.timestamp(), 0).unwrap(), date_format)
-                .map_err(|e| AuditError::excel_error(format!("写入日期失败: {}", e)))?;
+            // 写入合并的日期时间（修复：使用transaction_time如果已经是完整格式，否则合并）
+            let datetime_str = if tx.transaction_time.contains('/') || tx.transaction_time.contains('-') {
+                tx.transaction_time.clone()  // 已经是完整格式
+            } else {
+                tx.transaction_date.format("%Y/%m/%d %H:%M:%S").to_string()  // 合并格式
+            };
+            worksheet.write_string(row, 0, &datetime_str)
+                .map_err(|e| AuditError::excel_error(format!("写入日期时间失败: {}", e)))?;
             
-            worksheet.write_string(row, 1, &tx.transaction_time)
-                .map_err(|e| AuditError::excel_error(format!("写入时间失败: {}", e)))?;
-            
-            worksheet.write_number_with_format(row, 2, tx.income_amount.to_f64().unwrap_or(0.0), number_format)
+            worksheet.write_number(row, 1, tx.income_amount.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入收入金额失败: {}", e)))?;
             
-            worksheet.write_number_with_format(row, 3, tx.expense_amount.to_f64().unwrap_or(0.0), number_format)
+            worksheet.write_number(row, 2, tx.expense_amount.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入支出金额失败: {}", e)))?;
             
-            worksheet.write_number_with_format(row, 4, tx.balance.to_f64().unwrap_or(0.0), number_format)
+            worksheet.write_number(row, 3, tx.balance.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入余额失败: {}", e)))?;
             
-            worksheet.write_string(row, 5, &tx.fund_attribute)
+            worksheet.write_string(row, 4, &tx.fund_attribute)
                 .map_err(|e| AuditError::excel_error(format!("写入资金属性失败: {}", e)))?;
             
-            // 写入计算结果字段
+            // 写入计算结果字段（修复：调整列索引，因为删除了交易日期列）
             let personal_ratio = tx.personal_ratio.unwrap_or(Decimal::ZERO);
             let company_ratio = tx.company_ratio.unwrap_or(Decimal::ZERO);
             let behavior = tx.behavior_nature.as_deref().unwrap_or("");
             
-            worksheet.write_number_with_format(row, 6, personal_ratio.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 7, company_ratio.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_string(row, 8, behavior)?;
+            worksheet.write_number(row, 5, personal_ratio.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 6, company_ratio.to_f64().unwrap_or(0.0))?;
+            worksheet.write_string(row, 7, behavior)?;
             
             // 累计数据字段
             let cum_misap = tx.cumulative_misappropriation.unwrap_or(Decimal::ZERO);
             let cum_advance = tx.cumulative_advance.unwrap_or(Decimal::ZERO);
             let cum_company_returned = tx.cumulative_company_principal_returned.unwrap_or(Decimal::ZERO);
             let cum_personal_returned = tx.cumulative_personal_principal_returned.unwrap_or(Decimal::ZERO);
-            let total_personal_profit = tx.total_personal_profit.unwrap_or(Decimal::ZERO);
-            let total_company_profit = tx.total_company_profit.unwrap_or(Decimal::ZERO);
+            let total_personal_profit = tx.cumulative_personal_profit.unwrap_or(Decimal::ZERO);
+            let total_company_profit = tx.cumulative_company_profit.unwrap_or(Decimal::ZERO);
             let personal_balance = tx.personal_balance.unwrap_or(Decimal::ZERO);
             let company_balance = tx.company_balance.unwrap_or(Decimal::ZERO);
-            let total_balance = tx.total_balance.unwrap_or(Decimal::ZERO);
+            let total_balance = tx.personal_balance.unwrap_or(Decimal::ZERO) + tx.company_balance.unwrap_or(Decimal::ZERO);
             let funding_gap = tx.funding_gap.unwrap_or(Decimal::ZERO);
             
-            worksheet.write_number_with_format(row, 9, cum_misap.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 10, cum_advance.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 11, cum_company_returned.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 12, cum_personal_returned.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 13, total_personal_profit.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 14, total_company_profit.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 15, personal_balance.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 16, company_balance.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 17, total_balance.to_f64().unwrap_or(0.0), number_format)?;
-            worksheet.write_number_with_format(row, 18, funding_gap.to_f64().unwrap_or(0.0), number_format)?;
+            worksheet.write_number(row, 8, cum_misap.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 9, cum_advance.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 10, cum_company_returned.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 11, cum_personal_returned.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 12, total_personal_profit.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 13, total_company_profit.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 14, personal_balance.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 15, company_balance.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 16, total_balance.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(row, 17, funding_gap.to_f64().unwrap_or(0.0))?;
             
             // 定期报告进度
             if row % 1000 == 0 {
@@ -410,7 +415,7 @@ impl ExcelProcessor {
         
         let header_format = Format::new()
             .set_bold()
-            .set_background_color(Color::Gray25);
+            .set_background_color(Color::Gray);
         
         let number_format = Format::new()
             .set_num_format("#,##0.00");
@@ -429,13 +434,13 @@ impl ExcelProcessor {
             ("资金缺口", summary.funding_gap),
         ];
         
-        worksheet.write_string_with_format(0, 0, "指标", &header_format)?;
-        worksheet.write_string_with_format(0, 1, "数值", &header_format)?;
+        worksheet.write_string(0, 0, "指标")?;
+        worksheet.write_string(0, 1, "数值")?;
         
         for (row, (name, value)) in summary_items.iter().enumerate() {
             let row = (row + 1) as u32;
-            worksheet.write_string(row, 0, name)?;
-            worksheet.write_number_with_format(row, 1, value.to_f64().unwrap_or(0.0), &number_format)?;
+            worksheet.write_string(row, 0, *name)?;
+            worksheet.write_number(row, 1, value.to_f64().unwrap_or(0.0))?;
         }
         
         Ok(())
@@ -453,44 +458,44 @@ impl ExcelProcessor {
             let row = (row + 1) as u32; // 跳过表头行
             
             // 写入原始数据
-            worksheet.write_datetime(row, 0, &tx.transaction_date, Some(date_format))
+            worksheet.write_string(row, 0, &tx.transaction_date.format("%Y-%m-%d %H:%M:%S").to_string())
                 .map_err(|e| AuditError::excel_error(format!("写入日期失败: {}", e)))?;
             
-            worksheet.write_string(row, 1, &tx.transaction_time, None)
+            worksheet.write_string(row, 1, &tx.transaction_time)
                 .map_err(|e| AuditError::excel_error(format!("写入时间失败: {}", e)))?;
             
-            worksheet.write_number(row, 2, tx.income_amount.to_f64().unwrap_or(0.0), Some(number_format))
+            worksheet.write_number(row, 2, tx.income_amount.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入收入金额失败: {}", e)))?;
             
-            worksheet.write_number(row, 3, tx.expense_amount.to_f64().unwrap_or(0.0), Some(number_format))
+            worksheet.write_number(row, 3, tx.expense_amount.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入支出金额失败: {}", e)))?;
             
-            worksheet.write_number(row, 4, tx.balance.to_f64().unwrap_or(0.0), Some(number_format))
+            worksheet.write_number(row, 4, tx.balance.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入余额失败: {}", e)))?;
             
-            worksheet.write_string(row, 5, &tx.fund_attribute, None)
+            worksheet.write_string(row, 5, &tx.fund_attribute)
                 .map_err(|e| AuditError::excel_error(format!("写入资金属性失败: {}", e)))?;
             
             // 写入计算字段
             let col_offset = 6;
             if let Some(personal_ratio) = tx.personal_ratio {
-                worksheet.write_number(row, col_offset, personal_ratio.to_f64().unwrap_or(0.0), Some(number_format))
+                worksheet.write_number(row, col_offset, personal_ratio.to_f64().unwrap_or(0.0))
                     .map_err(|e| AuditError::excel_error(format!("写入个人占比失败: {}", e)))?;
             }
             
             if let Some(company_ratio) = tx.company_ratio {
-                worksheet.write_number(row, col_offset + 1, company_ratio.to_f64().unwrap_or(0.0), Some(number_format))
+                worksheet.write_number(row, col_offset + 1, company_ratio.to_f64().unwrap_or(0.0))
                     .map_err(|e| AuditError::excel_error(format!("写入公司占比失败: {}", e)))?;
             }
             
             if let Some(behavior) = &tx.behavior_nature {
-                worksheet.write_string(row, col_offset + 2, behavior, None)
+                worksheet.write_string(row, col_offset + 2, behavior)
                     .map_err(|e| AuditError::excel_error(format!("写入行为性质失败: {}", e)))?;
             }
             
             // 继续写入其他计算字段...
             if let Some(cum_misap) = tx.cumulative_misappropriation {
-                worksheet.write_number(row, col_offset + 3, cum_misap.to_f64().unwrap_or(0.0), Some(number_format))
+                worksheet.write_number(row, col_offset + 3, cum_misap.to_f64().unwrap_or(0.0))
                     .map_err(|e| AuditError::excel_error(format!("写入累计挪用失败: {}", e)))?;
             }
             
@@ -506,16 +511,12 @@ impl ExcelProcessor {
     }
     
     /// 写入摘要工作表
-    fn write_summary_sheet(&self, workbook: &Workbook, summary: &AuditSummary) -> AuditResult<()> {
-        let mut worksheet = workbook.add_worksheet(Some("分析摘要"))
-            .map_err(|e| AuditError::excel_error(format!("创建摘要工作表失败: {}", e)))?;
+    fn write_summary_sheet(&self, workbook: &mut Workbook, summary: &AuditSummary) -> AuditResult<()> {
+        let worksheet = workbook.add_worksheet();
         
-        let header_format = workbook.add_format()
-            .set_bold()
-            .set_bg_color(FormatColor::Gray);
-        
-        let number_format = workbook.add_format()
-            .set_num_format("#,##0.00");
+        // 格式化功能暂时简化
+        // let header_format = Format::new().set_bold();
+        // let number_format = Format::new();
         
         // 写入摘要数据
         let summary_items = [
@@ -531,16 +532,16 @@ impl ExcelProcessor {
             ("资金缺口", summary.funding_gap),
         ];
         
-        worksheet.write_string(0, 0, "指标", Some(&header_format))
+        worksheet.write_string(0, 0, "指标")
             .map_err(|e| AuditError::excel_error(format!("写入摘要表头失败: {}", e)))?;
-        worksheet.write_string(0, 1, "数值", Some(&header_format))
+        worksheet.write_string(0, 1, "数值")
             .map_err(|e| AuditError::excel_error(format!("写入摘要表头失败: {}", e)))?;
         
         for (row, (name, value)) in summary_items.iter().enumerate() {
             let row = (row + 1) as u32;
-            worksheet.write_string(row, 0, name, None)
+            worksheet.write_string(row, 0, *name)
                 .map_err(|e| AuditError::excel_error(format!("写入摘要名称失败: {}", e)))?;
-            worksheet.write_number(row, 1, value.to_f64().unwrap_or(0.0), Some(&number_format))
+            worksheet.write_number(row, 1, value.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入摘要数值失败: {}", e)))?;
         }
         
@@ -556,20 +557,12 @@ impl ExcelProcessor {
         let path = output_path.as_ref();
         info!("开始导出资金池记录到: {}", path.display());
         
-        let workbook = Workbook::new(path.to_str().unwrap())
-            .map_err(|e| AuditError::excel_error(format!("创建Excel文件失败: {}", e)))?;
+        let mut workbook = Workbook::new();
+        let worksheet = workbook.add_worksheet();
         
-        let mut worksheet = workbook.add_worksheet(Some("场外资金池记录"))
-            .map_err(|e| AuditError::excel_error(format!("创建工作表失败: {}", e)))?;
-        
-        // 设置格式
-        let header_format = workbook.add_format()
-            .set_bold()
-            .set_bg_color(FormatColor::Green)
-            .set_font_color(FormatColor::White);
-        
-        let number_format = workbook.add_format()
-            .set_num_format("#,##0.00");
+        // 格式化功能暂时简化
+        // let header_format = Format::new().set_bold();
+        // let number_format = Format::new();
         
         // 写入表头
         let headers = [
@@ -578,46 +571,41 @@ impl ExcelProcessor {
         ];
         
         for (col, header) in headers.iter().enumerate() {
-            worksheet.write_string(0, col as u16, header, Some(&header_format))
-                .map_err(|e| AuditError::excel_error(format!("写入资金池表头失败: {}", e)))?;
+            worksheet.write_string(0, col as u16, *header)?;
         }
         
         // 写入数据
         for (row, record) in records.iter().enumerate() {
             let row = (row + 1) as u32;
             
-            worksheet.write_string(row, 0, &record.transaction_time, None)
-                .map_err(|e| AuditError::excel_error(format!("写入交易时间失败: {}", e)))?;
+            worksheet.write_string(row, 0, &record.transaction_time)?;
             
-            worksheet.write_string(row, 1, &record.pool_name, None)
-                .map_err(|e| AuditError::excel_error(format!("写入资金池名称失败: {}", e)))?;
+            worksheet.write_string(row, 1, &record.pool_name)?;
             
-            worksheet.write_number(row, 2, record.inflow.to_f64().unwrap_or(0.0), Some(&number_format))
-                .map_err(|e| AuditError::excel_error(format!("写入入金失败: {}", e)))?;
+            worksheet.write_number(row, 2, record.inflow.to_f64().unwrap_or(0.0))?;
             
-            worksheet.write_number(row, 3, record.outflow.to_f64().unwrap_or(0.0), Some(&number_format))
-                .map_err(|e| AuditError::excel_error(format!("写入出金失败: {}", e)))?;
+            worksheet.write_number(row, 3, record.outflow.to_f64().unwrap_or(0.0))?;
             
-            worksheet.write_number(row, 4, record.total_balance.to_f64().unwrap_or(0.0), Some(&number_format))
+            worksheet.write_number(row, 4, record.total_balance.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入总余额失败: {}", e)))?;
             
-            worksheet.write_string(row, 5, &record.single_fund_ratio, None)
+            worksheet.write_string(row, 5, &record.single_fund_ratio)
                 .map_err(|e| AuditError::excel_error(format!("写入单笔占比失败: {}", e)))?;
             
-            worksheet.write_string(row, 6, &record.total_fund_ratio, None)
+            worksheet.write_string(row, 6, &record.total_fund_ratio)
                 .map_err(|e| AuditError::excel_error(format!("写入总占比失败: {}", e)))?;
             
-            worksheet.write_string(row, 7, &record.behavior_nature, None)
+            worksheet.write_string(row, 7, &record.behavior_nature)
                 .map_err(|e| AuditError::excel_error(format!("写入行为性质失败: {}", e)))?;
             
-            worksheet.write_number(row, 8, record.cumulative_purchase.to_f64().unwrap_or(0.0), Some(&number_format))
+            worksheet.write_number(row, 8, record.cumulative_purchase.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入累计申购失败: {}", e)))?;
             
-            worksheet.write_number(row, 9, record.cumulative_redemption.to_f64().unwrap_or(0.0), Some(&number_format))
+            worksheet.write_number(row, 9, record.cumulative_redemption.to_f64().unwrap_or(0.0))
                 .map_err(|e| AuditError::excel_error(format!("写入累计赎回失败: {}", e)))?;
         }
         
-        workbook.close()
+        workbook.save(path)
             .map_err(|e| AuditError::excel_error(format!("保存资金池记录失败: {}", e)))?;
         
         info!("✅ 资金池记录导出完成，共 {} 条记录", records.len());

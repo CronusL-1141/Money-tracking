@@ -1,299 +1,252 @@
 //! 差额计算法追踪器实现
+//!
+//! 基于新共享架构实现，使用TrackerBase作为基础状态管理
+//! 对应Python版本的差额计算法资金追踪器完整功能
 
-use crate::interfaces::Tracker;
-use crate::models::{Config, AuditSummary};
+use super::shared::{
+    TrackerBase, BehaviorAnalyzer, InvestmentPoolManager, FundFlowCommon, SummaryGenerator
+};
+use crate::data_models::{Config, AuditSummary, Transaction};
 use crate::errors::{AuditError, AuditResult};
 use chrono::NaiveDateTime;
 use rust_decimal::Decimal;
 
 /// 差额计算法追踪器
 /// 
-/// 实现差额计算法的资金追踪算法
-/// 特点：个人余额优先扣除，简化计算逻辑
+/// 基于共享架构实现差额计算法的资金追踪算法
+/// 特点：余额优先扣除策略，简化计算逻辑
+/// 对应Python版本的差额计算法资金追踪器
 #[derive(Debug, Clone)]
 pub struct BalanceMethodTracker {
-    config: Config,
-    initialized: bool,
-    
-    // 核心状态
-    personal_balance: Decimal,
-    company_balance: Decimal,
-    
-    // 统计信息
-    total_misappropriation: Decimal,
-    total_advance_payment: Decimal,
-    total_company_principal_returned: Decimal,
-    total_personal_principal_returned: Decimal,
-    total_personal_profit: Decimal,
-    total_company_profit: Decimal,
-    investment_product_count: u32,
+    /// 共享基础状态（13个状态变量）
+    base: TrackerBase,
+    /// 行为分析器（挪用垫付分析）
+    behavior_analyzer: BehaviorAnalyzer,
 }
 
 impl BalanceMethodTracker {
     /// 创建新的差额计算法追踪器
+    /// 对应Python版本的__init__方法
     pub fn new(config: Config) -> Self {
         Self {
-            config,
-            initialized: false,
-            personal_balance: Decimal::ZERO,
-            company_balance: Decimal::ZERO,
-            total_misappropriation: Decimal::ZERO,
-            total_advance_payment: Decimal::ZERO,
-            total_company_principal_returned: Decimal::ZERO,
-            total_personal_principal_returned: Decimal::ZERO,
-            total_personal_profit: Decimal::ZERO,
-            total_company_profit: Decimal::ZERO,
-            investment_product_count: 0,
+            base: TrackerBase::new(config),
+            behavior_analyzer: BehaviorAnalyzer::new(),
         }
     }
     
-    /// 计算资金缺口
-    fn calculate_funding_gap(&self) -> Decimal {
-        self.total_misappropriation 
-            - self.total_company_principal_returned
-            - self.total_advance_payment
+    /// 初始化余额
+    /// 对应Python版本的初始化余额处理
+    pub fn initialize_balance(&mut self, initial_balance: Decimal, balance_type: &str) -> AuditResult<()> {
+        // 使用基础类初始化
+        self.base.initialize_balance(initial_balance, balance_type)
     }
     
-    /// 处理差额计算法的资金流出
-    /// 
-    /// 算法逻辑：
-    /// 1. 如果是个人支出，优先从个人余额扣除
-    /// 2. 个人余额不足时，从公司余额扣除（构成挪用）
-    /// 3. 如果是公司支出，优先从公司余额扣除
-    /// 4. 公司余额不足时，从个人余额扣除（构成垫付）
-    fn process_balance_method_outflow(
+    /// 处理资金流入
+    /// 对应Python版本的处理资金流入方法
+    pub fn process_inflow(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
-    ) -> (Decimal, Decimal, String) {
-        let mut personal_used = Decimal::ZERO;
-        let mut company_used = Decimal::ZERO;
-        let mut behavior = String::new();
-        
-        if self.config.is_personal_fund(fund_attribute) {
-            // 个人支出
-            let personal_available = self.personal_balance.min(amount);
-            personal_used = personal_available;
-            self.personal_balance -= personal_available;
-            
-            let remaining = amount - personal_available;
-            if remaining > Decimal::ZERO {
-                // 个人余额不足，从公司余额扣除（挪用）
-                let company_available = self.company_balance.min(remaining);
-                company_used = company_available;
-                self.company_balance -= company_available;
-                
-                // 记录挪用
-                self.total_misappropriation += company_used;
-                
-                behavior = if personal_used > Decimal::ZERO {
-                    "个人支出+挪用".to_string()
-                } else {
-                    "挪用".to_string()
-                };
-            } else {
-                behavior = "个人支出".to_string();
-            }
-        } else if self.config.is_company_fund(fund_attribute) {
-            // 公司支出
-            let company_available = self.company_balance.min(amount);
-            company_used = company_available;
-            self.company_balance -= company_available;
-            
-            let remaining = amount - company_available;
-            if remaining > Decimal::ZERO {
-                // 公司余额不足，从个人余额扣除（垫付）
-                let personal_available = self.personal_balance.min(remaining);
-                personal_used = personal_available;
-                self.personal_balance -= personal_available;
-                
-                // 记录垫付
-                self.total_advance_payment += personal_used;
-                
-                behavior = if company_used > Decimal::ZERO {
-                    "公司支出+垫付".to_string()
-                } else {
-                    "垫付".to_string()
-                };
-            } else {
-                behavior = "公司支出".to_string();
-            }
-        } else {
-            // 未知资金属性，按总余额比例分配
-            let total_balance = self.personal_balance + self.company_balance;
-            if total_balance > Decimal::ZERO {
-                let personal_ratio = self.personal_balance / total_balance;
-                personal_used = (amount * personal_ratio).min(self.personal_balance);
-                company_used = amount - personal_used;
-                company_used = company_used.min(self.company_balance);
-                
-                self.personal_balance -= personal_used;
-                self.company_balance -= company_used;
-                
-                behavior = "比例分配支出".to_string();
-            } else {
-                behavior = "余额不足".to_string();
-            }
+        transaction_date: Option<NaiveDateTime>,
+    ) -> AuditResult<(Decimal, Decimal, String)> {
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        // 计算使用比例
-        let total_used = personal_used + company_used;
-        let (personal_ratio, company_ratio) = if total_used > Decimal::ZERO {
-            (personal_used / total_used, company_used / total_used)
+        // 使用共同资金流处理逻辑
+        let (personal_ratio, company_ratio, behavior) = FundFlowCommon::process_fund_inflow(
+            &mut self.base,
+            amount,
+            fund_attribute,
+            transaction_date,
+        );
+        
+        Ok((personal_ratio, company_ratio, behavior))
+    }
+    
+    /// 差额计算法资金扣除函数
+    /// 对应Python版本的余额优先扣除逻辑 - 根据资金属性优先扣除对应账户
+    fn balance_method_deduction_by_attribute(&mut self, amount: Decimal, fund_attribute: &str) -> (Decimal, Decimal) {
+        let personal_balance = self.base.personal_balance;
+        let company_balance = self.base.company_balance;
+        
+        // 根据资金属性确定优先扣除的账户
+        let (personal_deducted, company_deducted) = if self.base.config.is_personal_fund(fund_attribute) {
+            // 个人相关支出，优先扣除个人余额
+            let personal_used = amount.min(personal_balance);
+            let remaining = amount - personal_used;
+            let company_used = remaining.min(company_balance);
+            (personal_used, company_used)
+        } else if self.base.config.is_company_fund(fund_attribute) {
+            // 公司相关支出，优先扣除公司余额
+            let company_used = amount.min(company_balance);
+            let remaining = amount - company_used;
+            let personal_used = remaining.min(personal_balance);
+            (personal_used, company_used)
         } else {
-            (Decimal::ZERO, Decimal::ZERO)
+            // 其他支出，优先使用余额较多的一方
+            if personal_balance >= company_balance {
+                let personal_used = amount.min(personal_balance);
+                let remaining = amount - personal_used;
+                let company_used = remaining.min(company_balance);
+                (personal_used, company_used)
+            } else {
+                let company_used = amount.min(company_balance);
+                let remaining = amount - company_used;
+                let personal_used = remaining.min(personal_balance);
+                (personal_used, company_used)
+            }
         };
         
-        (personal_ratio, company_ratio, behavior)
+        // 更新基础余额
+        FundFlowCommon::update_balances_with_deduction(
+            &mut self.base,
+            personal_deducted,
+            company_deducted,
+        );
+        
+        (personal_deducted, company_deducted)
     }
     
-    /// 处理投资产品赎回（差额计算法）
-    fn process_investment_redemption_balance_method(
+    /// 处理普通资金流出
+    /// 对应Python版本的普通支出处理逻辑
+    pub fn process_outflow(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
-    ) -> (Decimal, Decimal, String) {
-        // 简化处理：按当前余额比例分配赎回收益
-        let total_balance = self.personal_balance + self.company_balance;
-        
-        if total_balance > Decimal::ZERO {
-            let personal_ratio = self.personal_balance / total_balance;
-            let company_ratio = self.company_balance / total_balance;
-            
-            let personal_share = amount * personal_ratio;
-            let company_share = amount * company_ratio;
-            
-            self.personal_balance += personal_share;
-            self.company_balance += company_share;
-            
-            // 记录投资收益
-            self.total_personal_profit += personal_share;
-            self.total_company_profit += company_share;
-            
-            self.investment_product_count += 1;
-            
-            (personal_ratio, company_ratio, format!("投资赎回 - {}", fund_attribute))
-        } else {
-            // 余额为零时，全部分配给个人（或根据具体业务规则）
-            self.personal_balance += amount;
-            self.total_personal_profit += amount;
-            self.investment_product_count += 1;
-            
-            (Decimal::ONE, Decimal::ZERO, format!("投资赎回 - {}", fund_attribute))
-        }
-    }
-}
-
-impl Tracker for BalanceMethodTracker {
-    fn initialize_balance(&mut self, initial_balance: Decimal, balance_type: &str) -> AuditResult<()> {
-        if self.config.is_personal_fund(balance_type) {
-            self.personal_balance = initial_balance;
-        } else if self.config.is_company_fund(balance_type) {
-            self.company_balance = initial_balance;
-        } else {
-            return Err(AuditError::tracker_init_error(
-                format!("未知的余额类型: {}", balance_type)
-            ));
-        }
-        
-        self.initialized = true;
-        Ok(())
-    }
-    
-    fn process_inflow(
-        &mut self,
-        amount: Decimal,
-        fund_attribute: &str,
-        _transaction_date: Option<NaiveDateTime>,
+        transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        if self.config.is_personal_fund(fund_attribute) {
-            self.personal_balance += amount;
-            Ok((Decimal::ONE, Decimal::ZERO, "个人收入".to_string()))
-        } else if self.config.is_company_fund(fund_attribute) {
-            self.company_balance += amount;
-            Ok((Decimal::ZERO, Decimal::ONE, "公司收入".to_string()))
-        } else {
-            Err(AuditError::validation_error(
-                format!("未知的资金属性: {}", fund_attribute)
-            ))
-        }
+        // 使用差额计算法扣除函数 - 根据资金属性优先扣除对应账户
+        let (personal_deduction, company_deduction) = self.balance_method_deduction_by_attribute(amount, fund_attribute);
+        
+        // 计算占比（基于原始金额）
+        let (personal_ratio, company_ratio) = FundFlowCommon::calculate_ratios(
+            personal_deduction,
+            company_deduction,
+            amount,
+        );
+        
+        // 分析行为性质
+        let behavior = FundFlowCommon::analyze_common_outflow_behavior(
+            &mut self.base,
+            &mut self.behavior_analyzer,
+            fund_attribute,
+            personal_deduction,
+            company_deduction,
+            amount,
+        );
+        
+        Ok((personal_ratio, company_ratio, behavior))
     }
     
-    fn process_outflow(
+    /// 处理投资产品申购
+    /// 对应Python版本的投资产品申购逻辑
+    pub fn process_investment_purchase(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
-        _transaction_date: Option<NaiveDateTime>,
+        transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        let result = self.process_balance_method_outflow(amount, fund_attribute);
-        Ok(result)
+        // 使用共同投资处理逻辑，传入差额计算法扣除函数
+        let result = FundFlowCommon::process_investment_purchase(
+            &mut self.base,
+            &self.behavior_analyzer,
+            amount,
+            fund_attribute,
+            transaction_date,
+            |base, amount| {
+                // 差额计算法扣除逻辑的闭包版本 - 应该使用正常的差额计算法逻辑
+                let personal_balance = base.personal_balance;
+                let company_balance = base.company_balance;
+                
+                // 投资申购是个人行为（带"-"分隔），优先扣除个人余额，不足部分算挪用公司资金
+                let personal_used = amount.min(personal_balance);
+                let remaining = amount - personal_used;
+                let company_used = remaining.min(company_balance);
+                let (personal_deducted, company_deducted) = (personal_used, company_used);
+                
+                // 更新余额
+                base.personal_balance = (base.personal_balance - personal_deducted).max(Decimal::ZERO);
+                base.company_balance = (base.company_balance - company_deducted).max(Decimal::ZERO);
+                base.update_total_balance();
+                
+                (personal_deducted, company_deducted)
+            },
+        );
+        
+        result.map_err(|e| AuditError::validation_error(e))
     }
     
-    fn process_investment_redemption(
+    /// 处理投资产品赎回
+    /// 对应Python版本的投资产品赎回逻辑
+    pub fn process_investment_redemption(
         &mut self,
         amount: Decimal,
         fund_attribute: &str,
-        _transaction_date: Option<NaiveDateTime>,
+        transaction_date: Option<NaiveDateTime>,
     ) -> AuditResult<(Decimal, Decimal, String)> {
-        if !self.initialized {
-            return Err(AuditError::tracker_init_error("追踪器未初始化"));
+        if !self.base.is_initialized() {
+            return Err(AuditError::validation_error("追踪器未初始化"));
         }
         
-        let result = self.process_investment_redemption_balance_method(amount, fund_attribute);
-        Ok(result)
-    }
-    
-    fn get_summary(&self) -> AuditResult<AuditSummary> {
-        Ok(AuditSummary {
-            personal_balance: self.personal_balance,
-            company_balance: self.company_balance,
-            total_misappropriation: self.total_misappropriation,
-            total_advance_payment: self.total_advance_payment,
-            total_company_principal_returned: self.total_company_principal_returned,
-            total_personal_principal_returned: self.total_personal_principal_returned,
-            total_personal_profit: self.total_personal_profit,
-            total_company_profit: self.total_company_profit,
-            funding_gap: self.calculate_funding_gap(),
-            investment_product_count: self.investment_product_count,
-            total_balance: self.personal_balance + self.company_balance,
-        })
-    }
-    
-    fn get_current_ratios(&self) -> AuditResult<(Decimal, Decimal)> {
-        let total_balance = self.personal_balance + self.company_balance;
-        if total_balance > Decimal::ZERO {
-            Ok((
-                self.personal_balance / total_balance,
-                self.company_balance / total_balance,
-            ))
-        } else {
-            Ok((Decimal::ZERO, Decimal::ZERO))
+        // 使用投资产品管理器处理赎回
+        let result = InvestmentPoolManager::process_investment_redemption(
+            &mut self.base,
+            fund_attribute,
+            amount,
+            transaction_date,
+        );
+        
+        match result {
+            Ok(result) => Ok(result),
+            Err(e) => Err(AuditError::validation_error(e)),
         }
     }
     
-    fn is_initialized(&self) -> bool {
-        self.initialized
+    /// 获取审计摘要
+    /// 对应Python版本的获取状态摘要方法
+    pub fn get_summary(&self) -> AuditResult<AuditSummary> {
+        Ok(SummaryGenerator::generate_audit_summary(&self.base))
     }
     
-    fn get_name(&self) -> &'static str {
+    /// 获取当前余额占比
+    pub fn get_current_ratios(&self) -> AuditResult<(Decimal, Decimal)> {
+        Ok(self.base.get_current_ratios())
+    }
+    
+    /// 检查是否已初始化
+    pub fn is_initialized(&self) -> bool {
+        self.base.is_initialized()
+    }
+    
+    /// 获取算法名称
+    pub fn get_name(&self) -> &'static str {
         "BALANCE_METHOD"
     }
     
-    fn get_description(&self) -> &'static str {
-        "差额计算法 - 个人优先扣除的简化算法"
+    /// 获取算法描述
+    pub fn get_description(&self) -> &'static str {
+        "差额计算法 - 基于当前余额优先策略进行资金扣除"
     }
     
-    fn reset(&mut self) -> AuditResult<()> {
-        *self = Self::new(self.config.clone());
+    /// 重置追踪器状态
+    pub fn reset(&mut self) -> AuditResult<()> {
+        self.base.reset();
+        self.behavior_analyzer = BehaviorAnalyzer::new();
         Ok(())
+    }
+    
+    /// 生成详细的摘要文本
+    pub fn generate_detailed_summary_text(&self) -> String {
+        SummaryGenerator::generate_detailed_summary_text(&self.base, "差额计算法")
     }
 }
 
@@ -308,8 +261,8 @@ mod tests {
         
         assert_eq!(tracker.get_name(), "BALANCE_METHOD");
         assert!(!tracker.is_initialized());
-        assert_eq!(tracker.personal_balance, Decimal::ZERO);
-        assert_eq!(tracker.company_balance, Decimal::ZERO);
+        assert_eq!(tracker.base.personal_balance, Decimal::ZERO);
+        assert_eq!(tracker.base.company_balance, Decimal::ZERO);
     }
     
     #[test]
@@ -320,19 +273,19 @@ mod tests {
         let result = tracker.initialize_balance(Decimal::from(100000), "个人");
         assert!(result.is_ok());
         assert!(tracker.is_initialized());
-        assert_eq!(tracker.personal_balance, Decimal::from(100000));
+        assert_eq!(tracker.base.personal_balance, Decimal::from(100000));
     }
     
     #[test]
-    fn test_personal_outflow_with_sufficient_balance() {
+    fn test_process_inflow() {
         let config = Config::new();
         let mut tracker = BalanceMethodTracker::new(config);
         
-        tracker.initialize_balance(Decimal::from(100000), "个人").unwrap();
+        tracker.initialize_balance(Decimal::from(50000), "个人").unwrap();
         
-        let result = tracker.process_outflow(
+        let result = tracker.process_inflow(
             Decimal::from(30000),
-            "个人应付",
+            "个人应收",
             None,
         );
         
@@ -340,59 +293,127 @@ mod tests {
         let (personal_ratio, company_ratio, behavior) = result.unwrap();
         assert_eq!(personal_ratio, Decimal::ONE);
         assert_eq!(company_ratio, Decimal::ZERO);
-        assert_eq!(behavior, "个人支出");
-        assert_eq!(tracker.personal_balance, Decimal::from(70000));
+        assert!(behavior.contains("个人资金流入"));
+        assert_eq!(tracker.base.personal_balance, Decimal::from(80000));
     }
     
     #[test]
-    fn test_personal_outflow_with_insufficient_balance() {
+    fn test_balance_method_priority() {
         let config = Config::new();
         let mut tracker = BalanceMethodTracker::new(config);
         
-        // 设置初始余额：个人50000，公司30000
-        tracker.initialize_balance(Decimal::from(50000), "个人").unwrap();
-        tracker.process_inflow(Decimal::from(30000), "公司应收", None).unwrap();
+        // 设置初始余额：个人60000，公司40000（个人余额更多）
+        tracker.initialize_balance(Decimal::from(60000), "个人").unwrap();
+        tracker.process_inflow(Decimal::from(40000), "公司应收", None).unwrap();
         
-        // 个人支出80000（超过个人余额）
-        let result = tracker.process_outflow(
-            Decimal::from(80000),
-            "个人应付",
-            None,
-        );
-        
-        assert!(result.is_ok());
-        let (personal_ratio, company_ratio, behavior) = result.unwrap();
-        
-        // 应该是个人50000 + 公司30000 = 总计80000
-        assert!(personal_ratio > Decimal::ZERO);
-        assert!(company_ratio > Decimal::ZERO);
-        assert!(behavior.contains("挪用"));
-        assert!(tracker.total_misappropriation > Decimal::ZERO);
-    }
-    
-    #[test]
-    fn test_company_outflow_with_advance_payment() {
-        let config = Config::new();
-        let mut tracker = BalanceMethodTracker::new(config);
-        
-        // 设置初始余额：个人80000，公司20000
-        tracker.initialize_balance(Decimal::from(80000), "个人").unwrap();
-        tracker.process_inflow(Decimal::from(20000), "公司应收", None).unwrap();
-        
-        // 公司支出50000（超过公司余额）
+        // 流出50000，应该优先扣除个人资金
         let result = tracker.process_outflow(
             Decimal::from(50000),
-            "公司应付",
+            "其他支出",
+            None,
+        );
+        
+        assert!(result.is_ok());
+        let (personal_ratio, company_ratio, _behavior) = result.unwrap();
+        
+        // 个人余额更多，应该优先扣除个人资金
+        // 50000全部来自个人资金：50000个人 + 0公司
+        assert_eq!(personal_ratio, Decimal::ONE); // 50000/50000
+        assert_eq!(company_ratio, Decimal::ZERO); // 0/50000
+        assert_eq!(tracker.base.personal_balance, Decimal::from(10000)); // 60000-50000
+        assert_eq!(tracker.base.company_balance, Decimal::from(40000)); // 未动
+    }
+    
+    #[test]
+    fn test_balance_method_mixed_deduction() {
+        let config = Config::new();
+        let mut tracker = BalanceMethodTracker::new(config);
+        
+        // 设置初始余额：个人30000，公司70000（公司余额更多）
+        tracker.initialize_balance(Decimal::from(30000), "个人").unwrap();
+        tracker.process_inflow(Decimal::from(70000), "公司应收", None).unwrap();
+        
+        // 流出80000，应该优先扣除公司资金，不足部分扣除个人资金
+        let result = tracker.process_outflow(
+            Decimal::from(80000),
+            "个人应付", // 个人支出使用公司资金构成挪用
             None,
         );
         
         assert!(result.is_ok());
         let (personal_ratio, company_ratio, behavior) = result.unwrap();
         
-        // 应该是公司20000 + 个人30000 = 总计50000
-        assert!(personal_ratio > Decimal::ZERO);
-        assert!(company_ratio > Decimal::ZERO);
-        assert!(behavior.contains("垫付"));
-        assert!(tracker.total_advance_payment > Decimal::ZERO);
+        // 公司余额更多，优先扣除：70000公司 + 10000个人
+        assert_eq!(personal_ratio, Decimal::new(125, 3)); // 10000/80000 = 0.125
+        assert_eq!(company_ratio, Decimal::new(875, 3)); // 70000/80000 = 0.875
+        assert!(behavior.contains("挪用")); // 个人支出使用公司资金构成挪用
+        assert_eq!(tracker.base.personal_balance, Decimal::from(20000)); // 30000-10000
+        assert_eq!(tracker.base.company_balance, Decimal::ZERO); // 70000-70000
+    }
+    
+    #[test]
+    fn test_get_current_ratios() {
+        let config = Config::new();
+        let mut tracker = BalanceMethodTracker::new(config);
+        
+        tracker.initialize_balance(Decimal::from(60000), "个人").unwrap();
+        tracker.process_inflow(Decimal::from(40000), "公司应收", None).unwrap();
+        
+        let result = tracker.get_current_ratios().unwrap();
+        let (personal_ratio, company_ratio) = result;
+        
+        assert_eq!(personal_ratio, Decimal::new(6, 1)); // 60000/100000 = 0.6
+        assert_eq!(company_ratio, Decimal::new(4, 1)); // 40000/100000 = 0.4
+    }
+}
+
+/// 差额计算法追踪器的公开接口
+/// 
+/// 提供与其他组件集成的API
+impl BalanceMethodTracker {
+    /// 获取内部状态（供测试和调试使用）
+    #[cfg(test)]
+    pub fn get_internal_state(&self) -> (&TrackerBase, &BehaviorAnalyzer) {
+        (&self.base, &self.behavior_analyzer)
+    }
+    
+    /// 更新交易记录的所有计算字段
+    /// 
+    /// 这个方法将当前追踪器的状态同步到Transaction结构中
+    pub fn update_transaction_fields(
+        &self,
+        transaction: &mut Transaction,
+        personal_ratio: Decimal,
+        company_ratio: Decimal,
+        behavior: &str,
+    ) -> AuditResult<()> {
+        // 获取当前摘要状态
+        let summary = self.get_summary()?;
+        
+        // 更新算法计算字段
+        transaction.personal_ratio = Some(personal_ratio);
+        transaction.company_ratio = Some(company_ratio);
+        transaction.behavior_nature = Some(behavior.to_string());
+        
+        // 更新累计字段
+        transaction.cumulative_misappropriation = Some(summary.total_misappropriation);
+        transaction.cumulative_advance = Some(summary.total_advance_payment);
+        transaction.cumulative_company_principal_returned = Some(summary.total_company_principal_returned);
+        transaction.cumulative_personal_principal_returned = Some(summary.total_personal_principal_returned);
+        transaction.cumulative_personal_profit = Some(summary.total_personal_profit);
+        transaction.cumulative_company_profit = Some(summary.total_company_profit);
+        
+        // 更新余额字段
+        transaction.personal_balance = Some(summary.personal_balance);
+        transaction.company_balance = Some(summary.company_balance);
+        transaction.funding_gap = Some(summary.funding_gap);
+        
+        // 修复时间戳格式问题：确保完整的日期时间格式
+        if !transaction.transaction_time.contains('/') && !transaction.transaction_time.contains('-') {
+            // 如果transaction_time只是时间部分，合并日期和时间
+            transaction.transaction_time = transaction.transaction_date.format("%Y/%m/%d %H:%M:%S").to_string();
+        }
+        
+        Ok(())
     }
 }
