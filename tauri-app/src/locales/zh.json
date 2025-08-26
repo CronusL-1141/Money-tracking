@@ -171,14 +171,14 @@
   "notifications": {
     "success": {
       "file_drag_success": "文件拖拽成功",
-      "file_selected": "已选择文件: {filename}",
+      "file_selected": "已选择文件: {{filename}}",
       "file_selection": "文件选择",
       "query_success": "查询成功",
-      "query_completed": "第{row}行数据查询完成",
+      "query_completed": "第{{row}}行数据查询完成",
       "save_success": "保存成功", 
       "save_completed": "查询结果已保存为JSON文件",
       "copy_success": "复制成功",
-      "copy_completed": "已复制{count}行日志到剪贴板",
+      "copy_completed": "已复制{{count}}行日志到剪贴板",
       "operation_completed": "操作完成",
       "analysis_success": "分析完成",
       "analysis_completed": "资金追踪分析已完成，请查看结果",
@@ -196,9 +196,9 @@
       "query_failed": "查询失败",
       "query_error": "查询过程中发生错误",
       "query_exception": "查询异常",
-      "query_execution_error": "查询执行异常: {error}",
+      "query_execution_error": "查询执行异常: {{error}}",
       "save_failed": "保存失败",
-      "save_error": "保存过程中发生错误: {error}",
+      "save_error": "保存过程中发生错误: {{error}}",
       "copy_failed": "复制失败",
       "clipboard_access_denied": "无法访问剪贴板",
       "analysis_failed": "分析失败",
@@ -314,10 +314,10 @@
       "funding_gap": "资金缺口"
     },
     "data": {
-      "transaction_data_row": "交易数据 (第{row}行)",
+      "transaction_data_row": "交易数据 (第{{row}}行)",
       "transaction_data_prefix": "交易数据",
       "row": "行",
-      "query_success_with_time": "查询成功完成 - 算法: {algorithm} | 用时: {time}s",
+      "query_success_with_time": "查询成功完成 - 算法: {{algorithm}} | 用时: {{time}}s",
       "query_success_completed": "查询成功完成"
     }
   },
@@ -370,7 +370,7 @@
     "standalone_version_description": "独立运行版本，无需联网更新。所有功能完整可用。",
     "python_version": "Python版本",
     "python_env_check": "Python环境检查",
-    "python_available": "Python {version} 可用",
+    "python_available": "Python {{version}} 可用",
     "python_not_available": "Python环境不可用",
     "click_check_env_hint": "点击检查环境按钮来验证Python配置",
     "app_update": "应用更新",
