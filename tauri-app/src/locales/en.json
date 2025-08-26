@@ -170,14 +170,14 @@
   "notifications": {
     "success": {
       "file_drag_success": "File drag successful",
-      "file_selected": "File selected: {filename}",
+      "file_selected": "File selected: {{filename}}",
       "file_selection": "File Selection",
       "query_success": "Query successful",
-      "query_completed": "Row {row} data query completed",
+      "query_completed": "Row {{row}} data query completed",
       "save_success": "Save successful",
       "save_completed": "Query results saved as JSON file",
       "copy_success": "Copy successful",
-      "copy_completed": "Copied {count} lines of log to clipboard",
+      "copy_completed": "Copied {{count}} lines of log to clipboard",
       "analysis_success": "Analysis completed",
       "analysis_completed": "Fund tracking analysis completed, please check results",
       "settings_saved": "Settings saved and applied successfully",
@@ -194,9 +194,9 @@
       "query_failed": "Query failed",
       "query_error": "Error occurred during query",
       "query_exception": "Query exception",
-      "query_execution_error": "Query execution exception: {error}",
+      "query_execution_error": "Query execution exception: {{error}}",
       "save_failed": "Save failed",
-      "save_error": "Error occurred during save: {error}",
+      "save_error": "Error occurred during save: {{error}}",
       "copy_failed": "Copy failed",
       "clipboard_access_denied": "Cannot access clipboard",
       "analysis_failed": "Analysis failed",
@@ -311,10 +311,10 @@
       "funding_gap": "Funding Gap"
     },
     "data": {
-      "transaction_data_row": "Transaction Data (Row {row})",
+      "transaction_data_row": "Transaction Data (Row {{row}})",
       "transaction_data_prefix": "Transaction Data",
       "row": "Row",
-      "query_success_with_time": "Query completed successfully - Algorithm: {algorithm} | Time: {time}s",
+      "query_success_with_time": "Query completed successfully - Algorithm: {{algorithm}} | Time: {{time}}s",
       "query_success_completed": "Query completed successfully"
     }
   },
@@ -367,7 +367,7 @@
     "standalone_version_description": "Standalone version, no network updates required. All features are fully available.",
     "python_version": "Python Version",
     "python_env_check": "Python Environment Check",
-    "python_available": "Python {version} is available",
+    "python_available": "Python {{version}} is available",
     "python_not_available": "Python environment is not available",
     "click_check_env_hint": "Click the check environment button to verify Python configuration",
     "data_management": "Data Management",

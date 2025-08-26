@@ -214,6 +214,8 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     
     let mut cmd = Command::new(&python_exe);
     cmd.current_dir(&project_root)
+        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
+        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
         .arg("-u")  // 无缓冲模式，立即输出
         .arg(script_path)
         .arg("--algorithm")
@@ -378,6 +380,8 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
     
     let mut cmd = Command::new(&python_exe);
     cmd.current_dir(&project_root)
+        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
+        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
         .arg("-u")  // 无缓冲模式，立即输出
         .arg(script_path)
         .arg("--file")
@@ -565,7 +569,9 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
 async fn check_python_env() -> Result<serde_json::Value, String> {
     let python_exe = find_python_executable();
     let mut cmd = Command::new(&python_exe);
-    cmd.arg("--version");
+    cmd.env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
+        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
+        .arg("--version");
     
     match cmd.output().await {
         Ok(output) => {
@@ -1074,6 +1080,8 @@ async fn query_fund_pool(pool_name: String, file_path: String, row_number: u32, 
     
     let mut cmd = Command::new(&python_exe);
     cmd.current_dir(&project_root)
+        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
+        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
         .arg("-u")  // 无缓冲模式，立即输出
         .arg(script_path)
         .arg("--file")
