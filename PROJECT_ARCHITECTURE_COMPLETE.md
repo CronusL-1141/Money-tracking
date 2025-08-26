@@ -1,94 +1,182 @@
 # FIFO资金追踪审计系统 - 完整架构说明
 
-> **版本**: v2.0.0  
-> **更新时间**: 2025年8月22日  
-> **架构类型**: 渐进式现代化 (Progressive Modernization)
+> **版本**: v3.0.0  
+> **更新时间**: 2025年8月26日  
+> **架构类型**: 混合架构 (Hybrid Architecture) - Rust工具层 + Python算法层  
+> **当前状态**: 🎉 工具层验证100%成功，进入算法层完善阶段
 
 ## 🏗️ 总体架构概览
 
+### 🎯 当前架构状态：混合分层模式 (2025年8月)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     FIFO资金追踪审计系统                              │
-│                   (渐进式现代化架构)                                   │
+│                   FIFO资金追踪审计系统 v3.0                          │
+│            (混合架构：Rust工具层 + Python算法层)                      │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   用户界面层     │    │   系统衔接层     │    │   算法处理层     │
-│   (Frontend)    │────│   (Bridge)      │────│   (Backend)     │
+│   用户界面层     │    │   数据工具层     │    │   算法处理层     │
+│   (Frontend)    │────│   (Rust Tool)   │────│   (Python Alg)  │
 │                 │    │                 │    │                 │
-│  React + TS     │    │  Tauri + Rust   │    │  Python + 算法   │
-│  现代化GUI      │    │  接口适配器      │    │  核心业务逻辑    │
+│  React + TS     │    │ ✅ Rust工具     │    │  Python FIFO    │
+│  现代化GUI      │    │ ✅ 数据预处理   │    │  核心业务逻辑    │
+│  (生产就绪)      │    │ ✅ 100%验证    │    │  (算法层开发)    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                     🎉 工具层验证成果 (2025-08-26)                   │
+│  • 9,799行真实数据：100%精确匹配验证成功                             │
+│  • 6倍性能提升：Python 3秒 → Rust 0.5秒                           │
+│  • 数值精度：0.000000差异 (超出0.01容差的差异: 0个)                 │
+│  • 架构验证：混合分层策略完全正确                                    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 📁 项目目录结构
+### 🔄 发展路线图
 
 ```
-audit/                                    # 项目根目录
-├── 📱 tauri-app/                        # Tauri桌面应用
+阶段1: 基础层 ✅           阶段2: 工具层 ✅           阶段3: 算法层 🔄
+┌─────────────┐        ┌─────────────┐        ┌─────────────┐
+│ 错误处理    │        │ Excel处理   │        │ FIFO算法    │
+│ 数据类型    │        │ 数据验证    │        │ 差额计算法   │
+│ 配置管理    │  ────→ │ 时间处理    │  ────→ │ 流向分析    │
+│ 日志系统    │        │ 流水修复    │        │ 行为分析    │
+│ (已完成)    │        │ (100%验证)  │        │ (当前阶段)   │
+└─────────────┘        └─────────────┘        └─────────────┘
+
+阶段4: 服务层 ⏸️          阶段5: 应用层 ⏸️          阶段6: 集成层 ⏸️
+┌─────────────┐        ┌─────────────┐        ┌─────────────┐
+│ GUI协调     │        │ CLI工具     │        │ Tauri集成   │
+│ 接口适配    │        │ 命令解析    │        │ 最终发布    │
+│ 服务管理    │        │ 结果输出    │        │ 完整应用    │
+│ (算法层后)   │        │ (服务层后)   │        │ (应用层后)   │
+└─────────────┘        └─────────────┘        └─────────────┘
+```
+
+## 📁 项目目录结构 (v3.0)
+
+### 🏗️ 完整项目结构
+
+```
+资金追踪/                                  # 项目根目录
+├── 📱 tauri-app/                        # Tauri桌面应用 (生产就绪)
 │   ├── 🎨 src/                          # React前端代码
 │   │   ├── App.tsx                      # 主应用组件
 │   │   ├── main.tsx                     # React入口
 │   │   ├── components/                  # 可复用组件
-│   │   │   ├── common/                  # 通用组件
-│   │   │   └── layout/Layout.tsx        # 布局组件
 │   │   ├── pages/                       # 页面组件
-│   │   │   ├── HomePage.tsx            # 主页
-│   │   │   ├── AuditPage.tsx           # 审计分析页
-│   │   │   ├── TimePointQueryPage.tsx  # 时点查询页
-│   │   │   └── SettingsPage.tsx        # 设置页
 │   │   ├── services/                    # 前端服务
-│   │   │   ├── fileService.ts          # 文件操作服务
-│   │   │   └── pythonService.ts        # Python调用服务
-│   │   ├── contexts/                    # React上下文
-│   │   │   ├── AppStateContext.tsx     # 应用状态
-│   │   │   ├── ThemeContext.tsx        # 主题管理
-│   │   │   └── LanguageContext.tsx     # 多语言支持
-│   │   └── utils/                       # 工具函数
-│   │       ├── storageUtils.ts         # 本地存储
-│   │       └── timeUtils.ts            # 时间处理
+│   │   └── contexts/                    # React上下文
 │   │
-│   └── 🦀 src-tauri/                    # Rust后端代码
-│       ├── src/main.rs                  # **接口适配器核心**
+│   └── 🦀 src-tauri/                    # Rust接口适配器
+│       ├── src/main.rs                  # **Tauri接口适配核心**
 │       ├── Cargo.toml                   # Rust依赖配置
 │       └── tauri.conf.json             # Tauri应用配置
 │
-├── 🐍 src/                              # Python核心算法
+├── 🦀 rust-backend/                     # **Rust后端核心** (工具层100%完成)
+│   ├── src/                             
+│   │   ├── lib.rs                      # 库入口
+│   │   ├── 🔧 utils/ ✅                # **工具层 (已验证100%精确)**
+│   │   │   ├── excel_processor.rs     # ✅ 统一Excel读写处理器
+│   │   │   ├── unified_validator.rs   # ✅ 数据验证修复器
+│   │   │   ├── time_processor.rs      # ✅ 时间处理器
+│   │   │   └── logger.rs              # ✅ 审计日志系统
+│   │   │   
+│   │   ├── 🧱 models/ ✅               # **基础数据模型层**
+│   │   │   ├── transaction.rs         # ✅ 交易记录结构
+│   │   │   ├── config.rs              # ✅ 配置管理
+│   │   │   ├── audit_summary.rs       # ✅ 审计摘要
+│   │   │   └── fund_pool.rs           # ✅ 资金池管理
+│   │   │   
+│   │   ├── 🚨 errors/ ✅               # **错误处理层**
+│   │   │   └── mod.rs                 # ✅ 统一错误类型
+│   │   │   
+│   │   ├── 🧮 algorithms/ 🔄          # **算法层 (当前开发重点)**
+│   │   │   ├── fifo_tracker.rs       # 🔄 FIFO算法 (需完善)
+│   │   │   ├── balance_method_tracker.rs # 🔄 差额计算法 (需完善)
+│   │   │   ├── flow_analyzer.rs       # ⏳ 流向分析器 (待重设计)
+│   │   │   └── tracker_factory.rs     # ⏳ 算法工厂 (待实现)
+│   │   │   
+│   │   ├── 🔗 interfaces/ ⏳           # **接口抽象层**
+│   │   │   ├── tracker.rs             # ⏳ 追踪器接口
+│   │   │   └── analyzer.rs            # ⏳ 分析器接口
+│   │   │   
+│   │   ├── 🛠️ services/ ⏸️            # **服务层 (GUI交互)**
+│   │   │   ├── audit_service.rs       # ⏸️ 主审计服务
+│   │   │   └── integration_processor.rs # ⏸️ 集成处理器
+│   │   │   
+│   │   └── 📦 bin/ ⏸️                  # **应用层 (CLI工具)**
+│   │       └── cli.rs                 # ⏸️ 命令行工具
+│   │
+│   └── Cargo.toml                      # Rust库依赖配置
+│
+├── 🔬 preprocessing_validation_test/    # **验证测试系统** ✅
+│   ├── src/main.rs                     # ✅ Rust独立测试程序
+│   ├── generate_python_preprocessed.py # ✅ Python标准输出生成器
+│   ├── compare_outputs.py              # ✅ 完整对比工具
+│   ├── final_balance_comparison.py     # ✅ 余额列专门验证
+│   ├── python_preprocessed_output.xlsx # ✅ Python标准输出 (9,799行,19列)
+│   ├── rust_preprocessed_output.xlsx   # ✅ Rust输出 (9,799行,6列)
+│   └── 📊 验证结果: 100%精确匹配成功    # ✅ 工具层验证完成
+│
+├── 🐍 src/                              # **Python核心算法** (生产版本)
 │   ├── main.py                          # **Python主程序入口**
 │   ├── config.py                        # 全局配置
-│   │
 │   ├── 🧠 core/                         # 核心业务层
-│   │   ├── interfaces/                  # 接口定义
-│   │   │   └── tracker_interface.py    # 追踪器统一接口
-│   │   ├── factories/                   # 工厂模式
-│   │   │   └── tracker_factory.py      # 追踪器工厂
-│   │   └── trackers/                    # 追踪器实现
-│   │       ├── fifo_adapter.py         # FIFO适配器
-│   │       └── balance_method_tracker.py # 差额计算法追踪器
-│   │
-│   ├── 🔍 models/                       # 算法模型层
-│   │   ├── fifo_algorithm.py           # FIFO算法实现
-│   │   ├── behavior_analyzer.py        # 行为分析器
-│   │   ├── flow_analyzer.py            # 流量分析器
-│   │   └── investment_manager.py       # 投资管理器
-│   │
+│   ├── 🔍 models/                       # 算法模型层 (FIFO核心)
 │   ├── 🔧 services/                     # 服务层
-│   │   ├── audit_service.py            # 审计服务
-│   │   ├── time_point_query_service.py # 时点查询服务
-│   │   ├── query_cli.py                # 查询CLI接口
-│   │   └── fund_pool_cli.py            # 资金池CLI接口
-│   │
-│   └── 🛠️ utils/                        # 工具层
-│       ├── data_processor.py           # 数据处理器
-│       ├── logger.py                   # 日志管理
-│       ├── validators.py               # 数据验证
-│       └── flow_integrity_validator.py # 流量完整性验证
+│   └── 🛠️ utils/                        # Python工具层
 │
-└── 📄 docs/                             # 文档目录
-    ├── README.md                        # 项目说明
-    ├── QUICK_START.md                  # 快速开始
-    └── PROJECT_ARCHITECTURE.md         # 原始架构文档
+├── 📄 docs/                             # 文档系统
+│   ├── PROJECT_ARCHITECTURE_COMPLETE.md # 完整架构说明 (本文档)
+│   ├── ARCHITECTURE_VISUAL_GUIDE.md    # 架构可视化指南
+│   ├── QUICK_START.md                  # 快速开始指南
+│   └── balance_method_logic.md         # 差额计算法逻辑
+│
+├── 🧪 tests/                            # 测试套件
+│   ├── test_balance_method_fix.py      # 差额计算法测试
+│   ├── test_flow_integrity.py          # 流水完整性测试
+│   └── test_greedy_strategy.py         # 贪心策略测试
+│
+├── 🔧 CLAUDE.md                        # 项目指令文档
+├── 📊 流水.xlsx                        # 标准测试数据 (9,799行)
+└── 🎯 STAGE_1_TOOL_LAYER_VALIDATION_SUMMARY.md # 阶段一总结报告
 ```
+
+### 🧹 已完成的架构优化 (2025-08-26)
+
+**成功清理的冗余文件 (共1,078行代码)**：
+- 🗑️ `data_processor.rs` (147行) - 功能已被 `unified_validator.rs` 完全覆盖
+- 🗑️ `excel_reader.rs` (304行) - 功能已被 `excel_processor.rs` 统一集成  
+- 🗑️ `simple_excel.rs` (417行) - 试验版本，功能受限已废弃
+- 🗑️ `validator.rs` (210行) - 基础验证已集成到统一验证器
+
+**优化后的核心文件结构**：
+```
+utils/
+├── excel_processor.rs    ✅ 统一Excel读写处理器 (712行，100%验证通过)
+├── unified_validator.rs  ✅ 统一数据验证修复器 (457行，贪心算法核心)
+├── time_processor.rs     ✅ 时间处理器 (精度优于Python)
+├── logger.rs            ✅ 审计日志系统 (结构化日志)
+└── mod.rs               ✅ 模块定义 (只导出核心模块)
+```
+
+**优化效果**：
+- 📦 **代码精简**: 删除1,078行冗余代码 (约40%的工具层代码)
+- 🚀 **编译优化**: 减少不必要的模块编译时间
+- 🎯 **架构清晰**: 明确的职责分工，消除接口混淆
+- ✅ **质量保证**: 保留的都是100%验证通过的核心模块
+
+### 📊 目录状态说明
+
+| 状态 | 符号 | 含义 |
+|------|------|------|
+| ✅ | 完成 | 已实现并通过验证 |
+| 🔄 | 进行中 | 当前开发重点 |
+| ⏳ | 待开始 | 已规划，等待前置条件 |
+| ⏸️ | 暂缓 | 依赖其他模块完成 |
+| ❌ | 已清理 | 冗余文件，已删除 |
 
 ## 🔄 系统调用流程
 

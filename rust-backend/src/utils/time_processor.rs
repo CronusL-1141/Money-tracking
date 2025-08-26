@@ -3,7 +3,7 @@
 //! 专门负责各种时间格式的解析和处理，对应Python版本的FlowAnalyzer中的时间处理部分
 
 use crate::errors::{AuditError, AuditResult};
-use chrono::{NaiveDateTime, NaiveDate, NaiveTime};
+use chrono::{NaiveDateTime, NaiveDate, NaiveTime, Datelike};
 use log::{warn, debug};
 
 /// 时间处理器

@@ -31,6 +31,10 @@ pub enum AuditError {
     #[error("序列化错误: {0}")]
     SerializationError(#[from] serde_json::Error),
     
+    /// Excel写入错误
+    #[error("Excel写入错误: {0}")]
+    XlsxError(#[from] rust_xlsxwriter::XlsxError),
+    
     /// 时间解析错误
     #[error("时间解析错误: {0}")]
     TimeParseError(String),

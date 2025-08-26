@@ -6,14 +6,14 @@
 use crate::errors::{AuditError, AuditResult};
 use crate::models::{Transaction, AuditSummary, FundPoolRecord, Config};
 use crate::utils::TimeProcessor;
-use calamine::{Reader, Xlsx, open_workbook};
-use chrono::{NaiveDateTime, NaiveDate, NaiveTime};
-use rust_decimal::Decimal;
+use calamine::{Reader, Xlsx, open_workbook, DataType};
+use chrono::NaiveDateTime;
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::path::Path;
-use log::{info, warn, error, debug};
+use log::{info, warn, debug};
 
 // 使用rust_xlsxwriter进行Excel写入
-use rust_xlsxwriter::{Workbook, Worksheet, Format, Color};
+use rust_xlsxwriter::{Workbook, Worksheet, Format, Color, ExcelDateTime};
 
 /// Excel处理器
 /// 
@@ -129,7 +129,7 @@ impl ExcelProcessor {
         
         // Python来源: src/utils/data_processor.py:94-96 遍历列名并记录索引
         for (idx, cell) in header_row.iter().enumerate() {
-            if let Some(column_name) = cell.get_string() {
+            if let Some(column_name) = cell.as_string() {
                 match column_name {
                     // Python来源: Config中定义的列名匹配
                     name if name == self.config.excel_columns.transaction_date_column => {
@@ -196,9 +196,8 @@ impl ExcelProcessor {
         // Python来源: src/utils/data_processor.py:177 `资金属性 = str(row['资金属性'])`
         // 解析资金属性
         let fund_attribute = row.get(indices.fund_attribute.unwrap())
-            .and_then(|cell| cell.get_string())
-            .unwrap_or("")
-            .to_string();
+            .and_then(|cell| cell.as_string())
+            .unwrap_or_else(|| String::new());
         
         if fund_attribute.is_empty() {
             return Err(AuditError::validation_error("资金属性不能为空"));
@@ -324,7 +323,7 @@ impl ExcelProcessor {
         ];
         
         for (col, header) in headers.iter().enumerate() {
-            worksheet.write_string_with_format(0, col as u16, header, format)
+            worksheet.write_string_with_format(0, col as u16, *header, format)
                 .map_err(|e| AuditError::excel_error(format!("写入表头失败: {}", e)))?;
         }
         
@@ -345,7 +344,7 @@ impl ExcelProcessor {
             
             // Python来源: 对应DataFrame各列的数据写入
             // 写入基础数据
-            worksheet.write_datetime_with_format(row, 0, &tx.transaction_date, date_format)
+            worksheet.write_datetime_with_format(row, 0, ExcelDateTime::from_timestamp(tx.transaction_date.timestamp(), 0).unwrap(), date_format)
                 .map_err(|e| AuditError::excel_error(format!("写入日期失败: {}", e)))?;
             
             worksheet.write_string(row, 1, &tx.transaction_time)

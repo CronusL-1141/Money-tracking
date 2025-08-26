@@ -6,7 +6,15 @@ use std::fs;
 use std::path::Path;
 
 /// 审计日志管理器
+#[derive(Debug)]
 pub struct AuditLogger;
+
+impl AuditLogger {
+    /// 创建新的日志实例
+    pub fn new(_name: &str) -> Self {
+        Self
+    }
+}
 
 impl AuditLogger {
     /// 初始化日志系统
