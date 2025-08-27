@@ -79,26 +79,24 @@ impl SummaryGenerator {
         }
         
         // 场外资金池记录统计
-        if !base.off_site_records.is_empty() {
+        if base.offsite_pool_records.record_count() > 0 {
             summary.push("【场外资金池记录统计】".to_string());
-            summary.push(format!("总记录数: {}", base.off_site_records.len()));
+            summary.push(format!("总记录数: {}", base.offsite_pool_records.record_count()));
             
             // 按产品分组统计
-            let mut product_stats: std::collections::HashMap<String, (usize, Decimal, Decimal)> = 
-                std::collections::HashMap::new();
+            let grouped = base.offsite_pool_records.group_by_pool();
             
-            for record in &base.off_site_records {
-                let (count, total_inflow, total_outflow) = product_stats
-                    .entry(record.pool_name.clone())
-                    .or_insert((0, Decimal::ZERO, Decimal::ZERO));
-                *count += 1;
-                *total_inflow += record.inflow;
-                *total_outflow += record.outflow;
-            }
-            
-            for (product, (count, inflow, outflow)) in product_stats {
-                summary.push(format!("  {}: {}笔交易, 入金¥{:.2}, 出金¥{:.2}", 
-                    product, count, inflow, outflow));
+            for (pool_name, records) in grouped.iter() {
+                let mut total_inflow = Decimal::ZERO;
+                let mut total_outflow = Decimal::ZERO;
+                
+                for record in records {
+                    total_inflow += record.inflow;
+                    total_outflow += record.outflow;
+                }
+                
+                summary.push(format!("  {}: {} 条记录，入金 {:.2}，出金 {:.2}", 
+                    pool_name, records.len(), total_inflow, total_outflow));
             }
             summary.push("".to_string());
         }
@@ -116,7 +114,7 @@ impl SummaryGenerator {
     /// # Returns
     /// CSV格式的字符串
     pub fn generate_off_site_records_csv(base: &TrackerBase) -> String {
-        if base.off_site_records.is_empty() {
+        if base.offsite_pool_records.record_count() == 0 {
             return "无场外资金池记录".to_string();
         }
         
@@ -126,7 +124,7 @@ impl SummaryGenerator {
         csv_lines.push("交易时间,资金池名称,入金,出金,总余额,个人余额,公司余额,资金占比,行为性质,累计申购,累计赎回".to_string());
         
         // 数据行
-        for record in &base.off_site_records {
+        for record in &base.offsite_pool_records.records {
             csv_lines.push(format!(
                 "{},{},{:.2},{:.2},{:.2},{:.2},{:.2},{},{},{:.2},{:.2}",
                 record.transaction_time,

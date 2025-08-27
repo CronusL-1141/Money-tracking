@@ -75,7 +75,7 @@ const SettingsPage: React.FC = () => {
     };
 
     loadStorageStats();
-  }, [queryState.history]); // 当查询历史变化时更新统计信息
+  }, [queryState.history]); // 当时点查询历史变化时更新统计信息
 
   // 检查系统环境
   const handleCheckEnvironment = async () => {
@@ -208,7 +208,7 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
-        message: t('settings.clear_history') + ' ' + t('notifications.success.operation_completed'),
+        message: '时点查询历史已清空',
       });
     } catch (error) {
       showNotification({
@@ -240,7 +240,7 @@ const SettingsPage: React.FC = () => {
   const handleClearAllData = () => {
     try {
       DataCleanup.resetAllData();
-      clearQueryHistory(); // 同步清空当前状态
+      clearQueryHistory(); // 同步清空时点查询历史
       setAnalysisStats({ count: 0 }); // 更新UI状态
       showNotification({
         type: 'success',
@@ -486,7 +486,7 @@ const SettingsPage: React.FC = () => {
                 {t('settings.data_management')}
               </Typography>
 
-              {/* 查询历史统计 */}
+              {/* 时点查询历史统计 */}
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" gutterBottom>
                   {t('settings.query_history')}
@@ -574,7 +574,7 @@ const SettingsPage: React.FC = () => {
                     onClick={handleClearQueryHistory}
                     disabled={queryState.history.length === 0}
                   >
-                    清空查询历史
+                    清空时点查询历史
                   </Button>
                   <Button
                     variant="outlined"
@@ -613,7 +613,7 @@ const SettingsPage: React.FC = () => {
                   <Box>
                     {queryState.history.length > 0 && (
                       <Typography variant="body2" sx={{ mb: 1 }}>
-                        • 查询历史包含 {queryState.history.length} 条记录，软件重启后仍会保留
+                        • 时点查询历史包含 {queryState.history.length} 条记录，软件重启后仍会保留
                       </Typography>
                     )}
                     {(analysisStats?.count || 0) > 0 && (

@@ -2,7 +2,7 @@
 //! 
 //! 对应Python版本的投资产品处理逻辑，包括申购、赎回、盈利实现等复杂机制
 
-use super::tracker_base::{TrackerBase, InvestmentPool, ProfitRecord, OffSiteRecord};
+use super::tracker_base::{TrackerBase, InvestmentPool, ProfitRecord};
 // use crate::data_models::Config; // 暂时未使用
 use rust_decimal::Decimal;
 use chrono::NaiveDateTime;
@@ -23,7 +23,7 @@ impl InvestmentPoolManager {
         personal_ratio: Decimal,
         company_ratio: Decimal,
         transaction_date: Option<NaiveDateTime>,
-    ) {
+    ) -> InvestmentPool {
         let personal_amount = amount * personal_ratio;
         let company_amount = amount * company_ratio;
 
@@ -75,16 +75,9 @@ impl InvestmentPoolManager {
         // 更新累计申购
         pool.cumulative_purchase += amount;
         
-        // 记录场外资金池交易（暂时禁用以避免借用检查问题）
-        // Self::record_off_site_transaction(
-        //     base,
-        //     product_code,
-        //     amount,
-        //     Decimal::ZERO, // 入金，出金为0
-        //     transaction_date,
-        //     pool,
-        //     "申购",
-        // );
+        // 复制池数据用于记录（避免借用检查问题）
+        let pool_data = pool.clone();
+        pool_data
     }
 
     /// 处理投资产品赎回
@@ -94,7 +87,7 @@ impl InvestmentPoolManager {
         base: &mut TrackerBase,
         product_code: &str,
         amount: Decimal,
-        _transaction_date: Option<NaiveDateTime>, // 暂时未使用
+        transaction_date: Option<NaiveDateTime>,
     ) -> Result<(Decimal, Decimal, String), String> {
         // 查找对应的投资产品记录
         if !base.investment_pools.contains_key(product_code) {
@@ -128,10 +121,10 @@ impl InvestmentPoolManager {
         // 计算收益情况和本金归还
         let (profit, returned_personal_principal, returned_company_principal) = 
             if total_amount > Decimal::ZERO {
-                // 按原始逻辑计算赎回比例和收益
+                // 资金池有余额，按比例计算本金归还，暂无收益确认
                 let redemption_ratio = if total_amount > Decimal::ZERO { amount / total_amount } else { Decimal::ZERO };
                 let corresponding_purchase_cost = total_amount * redemption_ratio;
-                let profit = amount - corresponding_purchase_cost;
+                let profit = Decimal::ZERO; // 只要资金池还有余额，就暂不确认收益
                 
                 // 计算实际归还的本金
                 let (returned_personal, returned_company) = if amount <= total_amount {
@@ -144,8 +137,17 @@ impl InvestmentPoolManager {
 
                 (profit, returned_personal, returned_company)
             } else {
-                // 资金池为0或负数，纯收益分配
-                let profit = amount;
+                // 资金池为0或负数，这笔赎回会产生收益
+                // 计算这次赎回后的资金池余额
+                let remaining_balance = total_amount - amount;
+                
+                // 如果赎回后余额变负，那么负数部分就是这笔交易的收益贡献
+                let profit = if remaining_balance < Decimal::ZERO {
+                    // 这笔赎回导致的新增收益
+                    remaining_balance.abs() - total_amount.abs()
+                } else {
+                    Decimal::ZERO
+                };
                 
                 (profit, Decimal::ZERO, Decimal::ZERO)
             };
@@ -202,19 +204,19 @@ impl InvestmentPoolManager {
         }
         base.update_total_balance();
 
-        // 记录场外资金池交易（暂时禁用以避免借用检查问题）
-        // {
-        //     let pool = base.investment_pools.get_mut(product_code).unwrap();
-        //     Self::record_off_site_transaction(
-        //         base,
-        //         product_code,
-        //         Decimal::ZERO, // 入金为0
-        //         amount, // 出金
-        //         transaction_date,
-        //         pool,
-        //         "赎回",
-        //     );
-        // }
+        // 记录场外资金池交易（复制池数据避免借用冲突）
+        let pool_data = base.investment_pools.get(product_code).unwrap().clone();
+        Self::record_off_site_transaction(
+            base,
+            product_code,
+            profit, // 传入计算的收益
+            amount, // 出金
+            transaction_date,
+            &pool_data,
+            "赎回",
+        );
+        
+        // 总结性日志将在最终阶段输出，这里不输出单条记录
 
         // 构造行为性质描述
         let prefix = product_code.split('-').next().unwrap_or("投资");
@@ -257,7 +259,7 @@ impl InvestmentPoolManager {
     }
 
     /// 记录场外资金池交易
-    fn record_off_site_transaction(
+    pub fn record_off_site_transaction(
         base: &mut TrackerBase,
         product_code: &str,
         inflow: Decimal,
@@ -287,26 +289,80 @@ impl InvestmentPoolManager {
             "资金池清空".to_string()
         };
 
-        let record = OffSiteRecord {
-            transaction_time: transaction_date
-                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                .unwrap_or_else(|| "未知时间".to_string()),
-            pool_name: product_code.to_string(),
-            inflow,
-            outflow,
-            total_balance: updated_total_balance,
-            personal_balance: updated_personal_balance,
-            company_balance: updated_company_balance,
-            fund_ratio,
-            behavior_nature: format!("{}（个人{:.0}，公司{:.0}）", transaction_type, 
-                if transaction_type == "申购" { inflow * pool.latest_personal_ratio } else { outflow * pool.latest_personal_ratio },
-                if transaction_type == "申购" { inflow * pool.latest_company_ratio } else { outflow * pool.latest_company_ratio }
-            ),
-            cumulative_purchase: pool.cumulative_purchase,
-            cumulative_redemption: pool.cumulative_redemption,
-        };
+        // 使用新的场外资金池记录管理器添加记录
+        let transaction_datetime = transaction_date.map(|dt| {
+            use chrono::{Local, TimeZone};
+            Local.from_local_datetime(&dt).single().unwrap_or_else(|| Local::now())
+        });
 
-        base.off_site_records.push(record);
+        if transaction_type == "申购" {
+            let personal_amount = inflow * pool.latest_personal_ratio;
+            let company_amount = inflow * pool.latest_company_ratio;
+            
+            base.offsite_pool_records.add_purchase_record(
+                transaction_datetime,
+                product_code.to_string(),
+                inflow,
+                updated_total_balance,
+                updated_personal_balance,
+                updated_company_balance,
+                personal_amount,
+                company_amount,
+                pool.latest_personal_ratio,
+                pool.latest_company_ratio,
+                pool.cumulative_purchase,
+                pool.cumulative_redemption,
+            );
+        } else {
+            let personal_return = outflow * pool.latest_personal_ratio;
+            let company_return = outflow * pool.latest_company_ratio;
+            // 使用传入的inflow参数作为profit（已经是正确计算的收益）
+            
+            base.offsite_pool_records.add_redemption_record(
+                transaction_datetime,
+                product_code.to_string(),
+                outflow,
+                updated_total_balance,
+                updated_personal_balance,
+                updated_company_balance,
+                personal_return,
+                company_return,
+                inflow, // 使用传入的inflow作为profit
+                pool.latest_personal_ratio,
+                pool.latest_company_ratio,
+                pool.cumulative_purchase,
+                pool.cumulative_redemption,
+            );
+        }
+        
+        // 总结性日志将在导出阶段统一输出
+    }
+    
+    /// 计算投资池的完整统计信息（包含历史已实现盈利）
+    pub fn calculate_complete_pool_stats(
+        base: &TrackerBase,
+        pool_name: &str,
+    ) -> Option<(Decimal, Decimal, Decimal)> { // (当前净盈亏, 历史已实现盈利, 总净盈亏)
+        if let Some(pool) = base.investment_pools.get(pool_name) {
+            // 当前净盈亏
+            let current_net_profit = if pool.total_amount < Decimal::ZERO {
+                // 负余额表示当前盈利
+                pool.total_amount.abs()
+            } else {
+                // 正余额或零余额，当前盈亏 = 累计赎回 - 累计申购
+                pool.cumulative_redemption - pool.cumulative_purchase
+            };
+            
+            // 历史已实现盈利
+            let historical_profit = pool.cumulative_realized_profit;
+            
+            // 总净盈亏 = 当前净盈亏 + 历史已实现盈利
+            let total_net_profit = current_net_profit + historical_profit;
+            
+            Some((current_net_profit, historical_profit, total_net_profit))
+        } else {
+            None
+        }
     }
 }
 

@@ -294,6 +294,17 @@ const AuditPage: React.FC = () => {
           console.log('result.statistics:', result.statistics);
           console.log('result.output_files:', result.output_files);
           
+          // 处理场外资金池记录文件（第二个输出文件）
+          let offsitePoolFile = undefined;
+          if (result.output_files.length > 1) {
+            const poolFilePath = result.output_files[1];
+            offsitePoolFile = {
+              name: poolFilePath.split(/[/\\]/).pop() || '场外资金池记录.xlsx',
+              path: poolFilePath,
+              size: 0, // 暂时设为0，后续可以通过文件系统获取
+            };
+          }
+
           const historyRecord: AnalysisHistoryRecord = {
             id: AnalysisHistoryManager.generateRecordId(),
             timestamp: new Date(),
@@ -309,6 +320,7 @@ const AuditPage: React.FC = () => {
               path: result.output_files[0] || '',
               size: result.statistics?.output_file_size || 0,
             },
+            offsitePoolFile: offsitePoolFile,
             statistics: {
               totalRecords: result.statistics?.total_records || 0,
               processingTime: result.statistics?.processing_time || 0,

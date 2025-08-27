@@ -5,7 +5,8 @@
 
 use crate::data_models::{
     Config, AuditSummary, Transaction, 
-    TauriAuditConfig, TauriAuditResult, TauriProcessStatus
+    TauriAuditConfig, TauriAuditResult, TauriProcessStatus,
+    OffsitePoolRecordManager
 };
 use crate::utils::{ExcelProcessor, UnifiedValidator};
 use crate::algorithms::{FifoTracker, BalanceMethodTracker};
@@ -53,6 +54,10 @@ pub struct AuditService {
     // GUI状态管理
     current_status: Arc<Mutex<TauriProcessStatus>>,
     output_log: Arc<Mutex<Vec<String>>>,
+    // 场外资金池记录存储
+    offsite_pool_records: Arc<Mutex<Option<OffsitePoolRecordManager>>>,
+    // 投资池数据存储（用于完整统计计算）
+    investment_pools_data: Arc<Mutex<Option<std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool>>>>,
 }
 
 impl AuditService {
@@ -65,6 +70,8 @@ impl AuditService {
             suppress_output: false,
             current_status: Arc::new(Mutex::new(TauriProcessStatus::idle())),
             output_log: Arc::new(Mutex::new(Vec::new())),
+            offsite_pool_records: Arc::new(Mutex::new(None)),
+            investment_pools_data: Arc::new(Mutex::new(None)),
         }
     }
     
@@ -77,6 +84,8 @@ impl AuditService {
             suppress_output: false,
             current_status: Arc::new(Mutex::new(TauriProcessStatus::idle())),
             output_log: Arc::new(Mutex::new(Vec::new())),
+            offsite_pool_records: Arc::new(Mutex::new(None)),
+            investment_pools_data: Arc::new(Mutex::new(None)),
         }
     }
     
@@ -268,6 +277,11 @@ impl AuditService {
         let processed_transactions = self.process_transactions_with_tracker(&mut tracker, transactions, "FIFO").await?;
         let summary = tracker.get_summary()?;
         
+        // 获取场外资金池记录（后续会用于导出）
+        self.store_offsite_pool_records(tracker.get_offsite_pool_records());
+        // 存储投资池数据（用于完整统计计算）
+        self.store_investment_pools_data(tracker.get_investment_pools());
+        
         Ok((summary, processed_transactions))
     }
     
@@ -278,6 +292,11 @@ impl AuditService {
         let mut tracker = BalanceMethodTracker::new(self.config.clone());
         let processed_transactions = self.process_transactions_with_tracker(&mut tracker, transactions, "BALANCE_METHOD").await?;
         let summary = tracker.get_summary()?;
+        
+        // 获取场外资金池记录（后续会用于导出）
+        self.store_offsite_pool_records(tracker.get_offsite_pool_records());
+        // 存储投资池数据（用于完整统计计算）
+        self.store_investment_pools_data(tracker.get_investment_pools());
         
         Ok((summary, processed_transactions))
     }
@@ -359,6 +378,39 @@ impl AuditService {
         let excel_processor = ExcelProcessor::new(self.config.clone());
         excel_processor.export_analysis_results(transactions, summary, &output_path)?;
         
+        // 导出场外资金池记录（如果存在）
+        if let Ok(records) = self.offsite_pool_records.lock() {
+            if let Some(ref record_manager) = *records {
+                info!("🔍 检测到场外资金池记录: {} 条", record_manager.record_count());
+                
+                if record_manager.record_count() > 0 {
+                    // 生成场外资金池记录文件名
+                    let pool_file_path = self.generate_offsite_pool_file_path(&output_path);
+                    info!("📋 开始导出场外资金池记录到: {}", pool_file_path.display());
+                    
+                    // 统计投资产品信息
+                    let grouped = record_manager.group_by_pool();
+                    info!("📊 投资产品统计: 共 {} 个投资池，合计 {} 笔交易", 
+                        grouped.len(), record_manager.record_count());
+                    
+                    excel_processor.export_offsite_pool_records(record_manager, &pool_file_path)?;
+                    
+                    self.report_stage(
+                        ProcessingStage::ResultExport,
+                        &format!("场外资金池记录已保存到: {}", pool_file_path.display())
+                    );
+                    
+                    info!("✅ 场外资金池记录导出完成!");
+                } else {
+                    info!("📋 场外资金池记录为空，跳过导出");
+                }
+            } else {
+                info!("📋 场外资金池记录管理器为空");
+            }
+        } else {
+            info!("📋 无法获取场外资金池记录锁");
+        }
+        
         let output_file = output_path.as_ref().display().to_string();
         self.report_stage(
             ProcessingStage::ResultExport,
@@ -383,7 +435,7 @@ impl AuditService {
         algorithm: &str,
         input_file: P,
         output_file: Option<P>,
-    ) -> AuditResult<(AuditSummary, Vec<Transaction>, String)> {
+    ) -> AuditResult<(AuditSummary, Vec<Transaction>, Vec<String>)> {
         let start_time = std::time::Instant::now();
         
         // 步骤1: 数据加载和验证
@@ -417,7 +469,21 @@ impl AuditService {
                 .join(&output_path)
         };
         
-        Ok((summary, processed_transactions, absolute_path.display().to_string()))
+        let main_file = absolute_path.display().to_string();
+        
+        // 检查是否有场外资金池记录，如果有则添加到结果中
+        let mut output_files = vec![main_file];
+        
+        if let Ok(offsite_records) = self.offsite_pool_records.lock() {
+            if let Some(record_manager) = offsite_records.as_ref() {
+                if record_manager.record_count() > 0 {
+                    let pool_file_path = self.generate_offsite_pool_file_path(&absolute_path);
+                    output_files.push(pool_file_path.display().to_string());
+                }
+            }
+        }
+        
+        Ok((summary, processed_transactions, output_files))
     }
     
     /// 生成临时输出文件路径
@@ -452,6 +518,54 @@ impl AuditService {
         Ok(output_path)
     }
     
+    /// 存储场外资金池记录
+    fn store_offsite_pool_records(&self, record_manager: &OffsitePoolRecordManager) {
+        info!("💾 存储场外资金池记录: {} 条", record_manager.record_count());
+        if let Ok(mut records) = self.offsite_pool_records.lock() {
+            *records = Some(record_manager.clone());
+            info!("💾 场外资金池记录存储成功");
+        } else {
+            info!("❌ 无法获取场外资金池记录存储锁");
+        }
+    }
+    
+    /// 存储投资池数据（用于完整统计计算）
+    fn store_investment_pools_data(&self, investment_pools: &std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool>) {
+        info!("💾 存储投资池数据: {} 个池", investment_pools.len());
+        if investment_pools.is_empty() {
+            info!("⚠️ 投资池数据为空，可能没有投资产品交易");
+        } else {
+            for (pool_name, pool) in investment_pools {
+                info!("📊 投资池 [{}]: 累计申购={}, 累计赎回={}, 历史盈利={}", 
+                    pool_name, pool.cumulative_purchase, pool.cumulative_redemption, pool.cumulative_realized_profit);
+            }
+        }
+        
+        if let Ok(mut pools) = self.investment_pools_data.lock() {
+            *pools = Some(investment_pools.clone());
+            info!("💾 投资池数据存储成功");
+        } else {
+            info!("❌ 无法获取投资池数据存储锁");
+        }
+    }
+    
+    /// 生成场外资金池记录文件路径
+    fn generate_offsite_pool_file_path<P: AsRef<std::path::Path>>(&self, main_output_path: P) -> std::path::PathBuf {
+        let main_path = main_output_path.as_ref();
+        let parent = main_path.parent().unwrap_or(main_path);
+        let stem = main_path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("analysis");
+        let extension = main_path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("xlsx");
+        
+        // 根据主文件名生成场外资金池记录文件名
+        // 例如: FIFO_analysis.xlsx -> 场外资金池记录_FIFO_analysis.xlsx
+        let pool_filename = format!("场外资金池记录_{}.{}", stem, extension);
+        parent.join(pool_filename)
+    }
+    
     /// Tauri GUI接口: 运行审计分析
     pub async fn run_audit_for_gui(&self, config: TauriAuditConfig) -> TauriAuditResult {
         let start_time = Instant::now();
@@ -470,11 +584,8 @@ impl AuditService {
         ).await;
         
         match result {
-            Ok((summary, transactions, output_file_path)) => {
+            Ok((summary, transactions, output_files)) => {
                 let processing_time = start_time.elapsed().as_secs_f64();
-                
-                // 输出文件路径（现在一定会有实际文件生成）
-                let output_files = vec![output_file_path];
                 
                 // 更新为完成状态
                 if let Ok(mut status) = self.current_status.lock() {

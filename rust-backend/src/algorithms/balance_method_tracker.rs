@@ -248,6 +248,16 @@ impl BalanceMethodTracker {
     pub fn generate_detailed_summary_text(&self) -> String {
         SummaryGenerator::generate_detailed_summary_text(&self.base, "差额计算法")
     }
+    
+    /// 获取场外资金池记录管理器
+    pub fn get_offsite_pool_records(&self) -> &crate::data_models::OffsitePoolRecordManager {
+        &self.base.offsite_pool_records
+    }
+    
+    /// 获取投资池数据（用于完整统计计算）
+    pub fn get_investment_pools(&self) -> &std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool> {
+        &self.base.investment_pools
+    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@
 //! 提供完整的Excel读取、写入、数据解析和格式化功能。
 
 use crate::errors::{AuditError, AuditResult};
-use crate::data_models::{Transaction, AuditSummary, FundPoolRecord, Config};
+use crate::data_models::{Transaction, AuditSummary, FundPoolRecord, Config, OffsitePoolRecordManager};
 use crate::utils::TimeProcessor;
 use calamine::{Reader, Xlsx, open_workbook, DataType};
 use chrono::NaiveDateTime;
@@ -609,6 +609,154 @@ impl ExcelProcessor {
             .map_err(|e| AuditError::excel_error(format!("保存资金池记录失败: {}", e)))?;
         
         info!("✅ 资金池记录导出完成，共 {} 条记录", records.len());
+        Ok(())
+    }
+    
+    /// 导出场外资金池记录到Excel
+    /// Python来源: src/models/fifo_algorithm.py:651 `生成场外资金池记录Excel`
+    /// 
+    /// # Arguments
+    /// * `record_manager` - 场外资金池记录管理器
+    /// * `output_path` - 输出文件路径
+    /// 
+    /// # Returns
+    /// * `AuditResult<()>` - 导出结果
+    pub fn export_offsite_pool_records<P: AsRef<Path>>(
+        &self,
+        record_manager: &crate::data_models::OffsitePoolRecordManager,
+        output_path: P,
+    ) -> AuditResult<()> {
+        let path = output_path.as_ref();
+        info!("开始导出场外资金池记录到: {}", path.display());
+        
+        if record_manager.record_count() == 0 {
+            info!("📋 没有场外资金池记录，跳过Excel生成");
+            return Ok(());
+        }
+        
+        info!("📋 检测到 {} 条场外资金池记录，开始处理...", record_manager.record_count());
+        
+        let mut workbook = Workbook::new();
+        let worksheet = workbook.add_worksheet();
+        
+        // Python来源: 写入表头
+        let headers = [
+            "交易时间", "资金池名称", "入金", "出金", "总余额",
+            "个人余额", "公司余额", "资金占比", "行为性质", "累计申购", "累计赎回", "净盈亏"
+        ];
+        
+        for (col, header) in headers.iter().enumerate() {
+            worksheet.write_string(0, col as u16, *header)?;
+        }
+        
+        // Python来源: 按资金池名称分组，每组内按时间排序
+        let grouped_records = record_manager.group_by_pool();
+        let mut sorted_pools: Vec<_> = grouped_records.keys().collect();
+        sorted_pools.sort();
+        
+        info!("📋 按资金池分组: 共 {} 个资金池", sorted_pools.len());
+        for pool_name in &sorted_pools {
+            info!("  └─ {}: {} 条记录", pool_name, grouped_records[*pool_name].len());
+        }
+        
+        let mut current_row = 1u32;
+        
+        // 按分组写入数据
+        for pool_name in sorted_pools {
+            let pool_records = &grouped_records[pool_name];
+            
+            // 写入该资金池的所有记录
+            for record in pool_records {
+                worksheet.write_string(current_row, 0, &record.transaction_time)?;
+                worksheet.write_string(current_row, 1, &record.pool_name)?;
+                
+                // 入金金额
+                worksheet.write_number(
+                    current_row, 2, 
+                    record.inflow.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 出金金额
+                worksheet.write_number(
+                    current_row, 3, 
+                    record.outflow.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 总余额
+                worksheet.write_number(
+                    current_row, 4, 
+                    record.total_balance.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 个人余额
+                worksheet.write_number(
+                    current_row, 5, 
+                    record.personal_balance.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 公司余额
+                worksheet.write_number(
+                    current_row, 6, 
+                    record.company_balance.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 资金占比
+                worksheet.write_string(current_row, 7, &record.fund_ratio)?;
+                
+                // 行为性质
+                worksheet.write_string(current_row, 8, &record.behavior_nature)?;
+                
+                // 累计申购
+                worksheet.write_number(
+                    current_row, 9, 
+                    record.cumulative_purchase.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 累计赎回
+                worksheet.write_number(
+                    current_row, 10, 
+                    record.cumulative_redemption.to_f64().unwrap_or(0.0)
+                )?;
+                
+                // 净盈亏
+                worksheet.write_number(
+                    current_row, 11, 
+                    record.net_profit_loss.to_f64().unwrap_or(0.0)
+                )?;
+                
+                current_row += 1;
+            }
+            
+            // Python来源: 添加总计行
+            if let Some(stats) = record_manager.calculate_pool_stats(pool_name) {
+                // 总计行
+                worksheet.write_string(current_row, 0, "── 总计 ──")?;
+                worksheet.write_string(current_row, 1, &format!("{} 汇总", pool_name))?;
+                worksheet.write_string(current_row, 2, &format!("总申购: ¥{:.0}", stats.total_purchase))?;
+                worksheet.write_string(current_row, 3, &format!("总赎回: ¥{:.0}", stats.total_redemption))?;
+                worksheet.write_string(current_row, 4, &format!("最终余额: ¥{:.0}", stats.final_balance))?;
+                worksheet.write_string(current_row, 5, &format!("个人{}: ¥{:.0}", stats.status, stats.cumulative_personal_profit_loss))?;
+                worksheet.write_string(current_row, 6, &format!("公司{}: ¥{:.0}", stats.status, stats.cumulative_company_profit_loss))?;
+                worksheet.write_string(current_row, 7, &format!("净盈亏: ¥{:.0}", stats.profit_loss))?;
+                worksheet.write_string(current_row, 8, &format!("状态: {}", stats.status))?;
+                worksheet.write_number(current_row, 9, stats.total_purchase.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 10, stats.total_redemption.to_f64().unwrap_or(0.0))?;
+                
+                current_row += 1;
+                
+                // Python来源: 添加空白行分隔
+                for col in 0..11 {
+                    worksheet.write_string(current_row, col, "")?;
+                }
+                current_row += 1;
+            }
+        }
+        
+        workbook.save(path)
+            .map_err(|e| AuditError::excel_error(format!("保存场外资金池记录失败: {}", e)))?;
+        
+        info!("✅ 场外资金池记录已保存至: {}", path.display());
+        info!("📊 共记录 {} 笔资金池交易，按资金池分组排序", record_manager.record_count());
         Ok(())
     }
 }

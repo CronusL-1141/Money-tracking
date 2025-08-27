@@ -10,7 +10,7 @@ pub mod fund_flow_common;
 pub mod summary;
 
 // 重新导出主要类型
-pub use tracker_base::{TrackerBase, InvestmentPool, ProfitRecord, OffSiteRecord};
+pub use tracker_base::{TrackerBase, InvestmentPool, ProfitRecord};
 pub use behavior_analyzer::BehaviorAnalyzer;
 pub use investment_pool::InvestmentPoolManager;
 pub use fund_flow_common::FundFlowCommon;

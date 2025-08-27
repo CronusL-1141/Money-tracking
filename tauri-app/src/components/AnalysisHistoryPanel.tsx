@@ -35,6 +35,7 @@ import {
   Error,
   Speed,
   Assessment,
+  TableChart,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
@@ -125,6 +126,21 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       }
     } catch (error) {
       console.error('打开分析结果出错:', error);
+    } finally {
+      setOperationLoading(null);
+    }
+  };
+
+  // 处理打开场外资金池记录
+  const handleOpenOffsitePoolRecord = async (record: AnalysisHistoryRecord) => {
+    setOperationLoading(`open_pool_${record.id}`);
+    try {
+      const success = await AnalysisHistoryManager.openOffsitePoolRecord(record);
+      if (!success) {
+        console.error('打开场外资金池记录失败');
+      }
+    } catch (error) {
+      console.error('打开场外资金池记录出错:', error);
     } finally {
       setOperationLoading(null);
     }
@@ -256,6 +272,14 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                             输入文件: {record.inputFile.name} ({AnalysisHistoryManager.formatFileSize(record.inputFile.size)})
                           </Typography>
                           <Typography variant="body2" color="text.secondary" gutterBottom>
+                            主分析结果: {record.outputFile.name}
+                          </Typography>
+                          {record.offsitePoolFile && (
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              配套场外资金池记录: {record.offsitePoolFile.name}
+                            </Typography>
+                          )}
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
                             {formatStatistics(record)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
@@ -283,6 +307,18 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                               <SaveAlt fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {record.offsitePoolFile && (
+                            <Tooltip title="打开场外资金池记录">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleOpenOffsitePoolRecord(record)}
+                                disabled={isAnalyzing || operationLoading === `open_pool_${record.id}` || record.status !== 'success'}
+                                color="secondary"
+                              >
+                                <TableChart fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="删除记录">
                             <IconButton
                               size="small"

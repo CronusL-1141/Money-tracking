@@ -162,7 +162,7 @@ impl FundFlowCommon {
         };
 
         // 更新投资产品资金池
-        InvestmentPoolManager::update_investment_pool(
+        let updated_pool = InvestmentPoolManager::update_investment_pool(
             base,
             fund_attribute,
             actual_amount,
@@ -170,6 +170,19 @@ impl FundFlowCommon {
             company_ratio,
             _transaction_date,
         );
+        
+        // 记录场外资金池交易
+        InvestmentPoolManager::record_off_site_transaction(
+            base,
+            fund_attribute,
+            actual_amount,
+            Decimal::ZERO, // 入金，出金为0
+            _transaction_date,
+            &updated_pool,
+            "申购",
+        );
+        
+        // 总结性日志将在最终阶段输出，这里不输出单条记录
 
         let prefix = fund_attribute.split('-').next().unwrap_or("投资");
         Ok((

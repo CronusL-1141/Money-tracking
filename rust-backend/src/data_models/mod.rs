@@ -7,6 +7,7 @@ pub mod audit_summary;
 pub mod fund_pool;
 pub mod config;
 pub mod tauri_types;
+pub mod offsite_pool_record;
 // pub mod investment; // 已删除，功能合并到algorithms/shared
 
 // 重新导出主要类型
@@ -15,4 +16,5 @@ pub use audit_summary::*;
 pub use fund_pool::*;
 pub use config::*;
 pub use tauri_types::*;
+pub use offsite_pool_record::*;
 // pub use investment::*; // 已删除

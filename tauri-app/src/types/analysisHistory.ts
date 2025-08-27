@@ -29,6 +29,13 @@ export interface AnalysisHistoryRecord {
     size?: number;
   };
   
+  /** 配套场外资金池记录文件（可选） */
+  offsitePoolFile?: {
+    name: string;
+    path: string;
+    size?: number;
+  };
+  
   /** 处理统计信息 */
   statistics: {
     totalRecords: number;

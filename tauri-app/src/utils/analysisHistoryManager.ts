@@ -119,11 +119,17 @@ export class AnalysisHistoryManager {
    */
   private static async deleteRecordFile(record: AnalysisHistoryRecord): Promise<void> {
     try {
+      // 删除主输出文件
       if (await exists(record.outputFile.path)) {
         await removeFile(record.outputFile.path);
       }
+      
+      // 删除场外资金池记录文件（如果存在）
+      if (record.offsitePoolFile && await exists(record.offsitePoolFile.path)) {
+        await removeFile(record.offsitePoolFile.path);
+      }
     } catch (error) {
-      console.warn(`Failed to delete file ${record.outputFile.path}:`, error);
+      console.warn(`Failed to delete files for record ${record.id}:`, error);
     }
   }
 
@@ -148,6 +154,37 @@ export class AnalysisHistoryManager {
       return true;
     } catch (error) {
       console.error('Failed to open analysis result:', error);
+      console.error('Error details:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 打开场外资金池记录文件
+   */
+  static async openOffsitePoolRecord(record: AnalysisHistoryRecord): Promise<boolean> {
+    try {
+      if (!record.offsitePoolFile) {
+        console.warn('该记录没有场外资金池记录文件');
+        return false;
+      }
+
+      console.log('尝试打开场外资金池记录文件:', record.offsitePoolFile.path);
+      
+      const fileExists = await exists(record.offsitePoolFile.path);
+      console.log('场外资金池记录文件是否存在:', fileExists);
+      
+      if (!fileExists) {
+        console.error('场外资金池记录文件不存在:', record.offsitePoolFile.path);
+        throw new Error('场外资金池记录文件不存在');
+      }
+      
+      console.log('调用open_file命令打开场外资金池记录...');
+      await invoke('open_file', { filePath: record.offsitePoolFile.path });
+      console.log('场外资金池记录文件打开成功');
+      return true;
+    } catch (error) {
+      console.error('Failed to open offsite pool record:', error);
       console.error('Error details:', error);
       return false;
     }

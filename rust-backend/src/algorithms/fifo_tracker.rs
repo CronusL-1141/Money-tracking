@@ -304,6 +304,16 @@ impl FifoTracker {
         SummaryGenerator::generate_detailed_summary_text(&self.base, "FIFO")
     }
     
+    /// 获取场外资金池记录管理器
+    pub fn get_offsite_pool_records(&self) -> &crate::data_models::OffsitePoolRecordManager {
+        &self.base.offsite_pool_records
+    }
+    
+    /// 获取投资池数据（用于完整统计计算）
+    pub fn get_investment_pools(&self) -> &std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool> {
+        &self.base.investment_pools
+    }
+    
     /// 获取FIFO队列状态（用于调试）
     pub fn get_queue_info(&self) -> String {
         if self.fund_inflow_queue.is_empty() {

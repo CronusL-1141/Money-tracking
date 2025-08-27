@@ -3,7 +3,7 @@
 //! 包含FIFO和差额计算法共同的13个状态变量和基础功能
 //! 对应Python版本的FIFO资金追踪器核心状态管理
 
-use crate::data_models::{Config, AuditSummary};
+use crate::data_models::{Config, AuditSummary, OffsitePoolRecordManager};
 use crate::errors::{AuditResult, AuditError};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
@@ -47,8 +47,8 @@ pub struct TrackerBase {
     // === 投资产品资金池管理 ===
     /// 投资产品资金池字典 - 对应Python的复杂10字段结构
     pub investment_pools: HashMap<String, InvestmentPool>,
-    /// 场外资金池记录 - 对应Python的场外资金池记录
-    pub off_site_records: Vec<OffSiteRecord>,
+    /// 场外资金池记录管理器 - 对应Python的场外资金池记录
+    pub offsite_pool_records: OffsitePoolRecordManager,
     
     // === 行为分析器增量管理 ===
     /// 上次行为分析器挪用金额（用于增量计算）
@@ -75,6 +75,10 @@ pub struct InvestmentPool {
     pub latest_personal_ratio: Decimal,
     /// 最新公司占比（动态计算）
     pub latest_company_ratio: Decimal,
+    /// 锁定的个人占比（资金池变负数时锁定）
+    pub locked_personal_ratio: Option<Decimal>,
+    /// 锁定的公司占比（资金池变负数时锁定）
+    pub locked_company_ratio: Option<Decimal>,
     /// 历史盈利记录（每次重置的盈利记录）
     pub historical_profit_records: Vec<ProfitRecord>,
     /// 累计已实现盈利（所有重置盈利的累计）
@@ -90,33 +94,6 @@ pub struct ProfitRecord {
     pub profit_amount: Decimal,
     /// 描述信息
     pub description: String,
-}
-
-/// 场外资金池记录
-#[derive(Debug, Clone)]  
-pub struct OffSiteRecord {
-    /// 交易时间
-    pub transaction_time: String,
-    /// 资金池名称
-    pub pool_name: String,
-    /// 入金
-    pub inflow: Decimal,
-    /// 出金
-    pub outflow: Decimal,
-    /// 总余额
-    pub total_balance: Decimal,
-    /// 个人余额
-    pub personal_balance: Decimal,
-    /// 公司余额
-    pub company_balance: Decimal,
-    /// 资金占比
-    pub fund_ratio: String,
-    /// 行为性质
-    pub behavior_nature: String,
-    /// 累计申购
-    pub cumulative_purchase: Decimal,
-    /// 累计赎回
-    pub cumulative_redemption: Decimal,
 }
 
 impl TrackerBase {
@@ -137,7 +114,7 @@ impl TrackerBase {
             investment_product_count: 0,
             total_balance: Decimal::ZERO,
             investment_pools: HashMap::new(),
-            off_site_records: Vec::new(),
+            offsite_pool_records: OffsitePoolRecordManager::new(),
             last_analyzer_misappropriation: Decimal::ZERO,
             last_analyzer_advance_payment: Decimal::ZERO,
         }
@@ -250,6 +227,8 @@ impl Default for InvestmentPool {
             cumulative_redemption: Decimal::ZERO,
             latest_personal_ratio: Decimal::ZERO,
             latest_company_ratio: Decimal::ZERO,
+            locked_personal_ratio: None,
+            locked_company_ratio: None,
             historical_profit_records: Vec::new(),
             cumulative_realized_profit: Decimal::ZERO,
         }
