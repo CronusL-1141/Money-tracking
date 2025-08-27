@@ -31,17 +31,15 @@
 #![allow(clippy::module_name_repetitions)]
 
 pub mod algorithms;
-// pub mod services; // 暂时禁用以专注算法层编译
+pub mod services;
 pub mod data_models;
-// pub mod interfaces; // 已删除，功能合并到algorithms层
 pub mod utils;
 pub mod errors;
 
 // 重新导出核心类型
 pub use algorithms::*;
-// pub use services::*;
+pub use services::*;
 pub use data_models::*;
-// pub use interfaces::*; // 已删除
 pub use errors::*;
 pub use utils::*;
 

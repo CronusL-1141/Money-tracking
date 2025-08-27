@@ -7,7 +7,6 @@ export type Language = 'zh' | 'en';
 export interface AppSettings {
   theme: ThemeMode;
   language: Language;
-  autoSave: boolean;
   notifications: boolean;
   maxHistoryRecords: number;
 }

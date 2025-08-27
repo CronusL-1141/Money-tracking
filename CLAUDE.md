@@ -6,12 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **涉案资金追踪分析系统** - 司法审计工具，用于检测公款挪用、职务侵占等经济犯罪行为。
 
-### 当前状态（2025年8月26日深夜）
+### 当前状态（2025年8月27日）
 - **生产版本**: Python v3.1.0 - 功能完整且稳定运行中
-- **开发版本**: Rust后端 v3.2.1 - **投资池逻辑分析完成，算法验证就绪**
+- **开发版本**: Rust后端 v3.2.2 - **算法验证完成，9,799条数据100%正确**
+- **GUI增强**: Tauri应用新增历史记录管理、时点清理、主题适配等功能
+- **用户体验**: iPhone风格时间选择器、混合日期时间选择、主题切换支持
 - **重大发现**: Python差额计算法投资池逻辑错误，Rust实现采用正确累计占比逻辑
-- **GUI状态**: Tauri应用通过Shell调用Python CLI，准备集成Rust后端
-- **开发重点**: Python差额计算法修复 → 算法一致性验证 → 服务层集成
+- **开发重点**: GUI功能完善 → Rust后端集成 → 性能优化
 
 ### 技术栈
 - **当前生产**: Python 3.11+ (CLI) + Tauri (Rust壳 + React前端，调用Python)
@@ -119,7 +120,7 @@ Excel文件 → Rust(calamine读取) → 数据验证修复 → 算法处理 →
 
 ## Rust迁移状态（rust-backend分支）
 
-### v3.2.1 当前进度 - 投资池逻辑分析完成阶段
+### v3.3.0 当前进度 - GUI功能完善阶段
 
 #### ✅ 基础层（已完成）
 - ✅ 核心数据结构（Transaction, Config, AuditSummary）
@@ -128,7 +129,7 @@ Excel文件 → Rust(calamine读取) → 数据验证修复 → 算法处理 →
 - ✅ 目录结构优化：`models` → `data_models`
 
 #### ✅ 工具层（已完成）
-- ✅ Excel处理模块（ExcelProcessor - 统一读写功能，暂时禁用）
+- ✅ Excel处理模块（ExcelProcessor - 统一读写功能，完全启用）
 - ✅ 统一数据验证器（UnifiedValidator - 流水完整性验证和修复）
 - ✅ 时间处理器（TimeProcessor - 时间解析和格式化）
 - ✅ 日志系统（AuditLogger - 结构化日志）
@@ -145,11 +146,12 @@ Excel文件 → Rust(calamine读取) → 数据验证修复 → 算法处理 →
 - ✅ BalanceMethod算法完整实现
 - ✅ 编译零错误通过
 
-#### ✅ 测试体系（v3.2.0已建立）
+#### ✅ 测试体系（v3.2.2已完成）
 - ✅ 统一测试目录：`independent_tests/`
 - ✅ 算法验证框架：基础构造功能验证成功
 - ✅ 预处理验证：100%与Python结果一致
-- 🔄 完整算法验证：待启用完整测试
+- ✅ **完整算法验证：9,799条真实数据100%正确**
+- ✅ **端到端验证：Excel输出完全正确**
 - ⏳ 性能基准测试：计划中
 
 #### ✅ 投资池逻辑分析（v3.2.1新完成）
@@ -158,11 +160,28 @@ Excel文件 → Rust(calamine读取) → 数据验证修复 → 算法处理 →
 - ✅ **根本原因**：差额计算法使用单次申购占比，FIFO使用累计占比
 - ✅ **案例验证**："关联银行卡-WWJ" Rust结果正确 (18.09%:81.91%)
 
-#### 🔄 下一阶段重点
-- **Python差额计算法修复** - 统一投资池占比计算逻辑至累计占比
-- **算法一致性验证** - 确认修复后两算法结果一致
-- **基准数据重生成** - 基于正确逻辑重新生成验证数据
-- **工具层集成** - 重新启用ExcelProcessor支持端到端测试
+#### ✅ 算法验证阶段完成（v3.2.2新完成）
+- ✅ **算法正确性验证**：FIFO和BalanceMethod算法100%正确
+- ✅ **真实数据测试**：9,799条交易记录完全处理正确
+- ✅ **Excel输出验证**：格式化输出完全正确
+- ✅ **端到端流水线**：从Excel输入到Excel输出全流程验证成功
+
+#### ✅ GUI功能完善（v3.3.0新完成）
+- ✅ **历史记录管理**：分析历史面板（AnalysisHistoryPanel）
+- ✅ **时间清理功能**：基于时间的清理对话框（TimeBasedCleanupDialog）
+- ✅ **时间选择器重设计**：
+  - ✅ iOS风格滚轮选择器（IOSDateTimePicker）
+  - ✅ 混合式日期时间选择器（HybridDateTimePicker）
+  - ✅ 日历+滑块组合设计，支持鼠标滚轮和拖拽
+- ✅ **主题系统集成**：完整的浅色/深色主题切换支持
+- ✅ **数据存储增强**：时点清理、批量删除、存储统计
+- ✅ **用户体验优化**：平滑过渡动画、主题适配颜色、直观控件
+
+#### 🚀 下一阶段目标
+- **Rust服务层集成** - 实现AuditService等GUI协调层
+- **CLI应用层重启** - 重新启用命令行工具
+- **性能基准测试** - 基准测试和性能调优
+- **最终集成** - Tauri直接调用Rust后端
 
 ## 核心设计原则
 
@@ -344,3 +363,22 @@ rust-backend/src/
 - 迁移是**渐进式**的，不要急于删除Python代码
 - **不需要算法对比功能**，每个分析任务使用单一算法即可
 - **数据不变性原则**: 源文件只读，修复在内存进行，业务算法只处理清洁数据
+
+### 关键文件路径（更新）
+- 主Excel数据: `流水.xlsx`
+- Python入口: `src/main.py`
+- Rust库入口: `rust-backend/src/lib.rs`
+- Tauri配置: `tauri-app/src-tauri/tauri.conf.json`
+- 测试目录: `tests/` (Python), `rust-backend/tests/` (Rust)
+
+#### 新增GUI组件（v3.3.0）
+- **时间选择器组件**:
+  - `tauri-app/src/components/HybridDateTimePicker.tsx` - 混合式日期时间选择器
+  - `tauri-app/src/components/IOSDateTimePicker.tsx` - iOS风格滚轮选择器
+- **功能面板组件**:
+  - `tauri-app/src/components/AnalysisHistoryPanel.tsx` - 分析历史记录面板
+  - `tauri-app/src/components/TimeBasedCleanupDialog.tsx` - 时间清理对话框
+- **工具函数增强**:
+  - `tauri-app/src/utils/analysisHistoryManager.ts` - 分析历史管理器
+  - `tauri-app/src/services/systemService.ts` - 系统服务层
+  - `tauri-app/src/types/analysisHistory.ts` - 历史记录类型定义

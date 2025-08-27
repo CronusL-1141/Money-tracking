@@ -14,14 +14,13 @@ import AppStateProvider from "./contexts/AppStateContext";
 // import TestPage from "./pages/TestPage";
 
 // 服务和类型导入
-import { checkPythonEnvironment } from "./services/pythonService";
-import { PythonEnvStatus } from "./types/python";
+import { checkSystemEnvironment, SystemEnvStatus } from "./services/systemService";
 
 const App: React.FC = () => {
   const { t } = useTranslation();
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
-  const [envStatus, setEnvStatus] = useState<PythonEnvStatus | null>(null);
+  const [envStatus, setEnvStatus] = useState<SystemEnvStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 初始化检查
@@ -31,12 +30,12 @@ const App: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // 检查Python环境
-        const status = await checkPythonEnvironment();
+        // 检查系统环境
+        const status = await checkSystemEnvironment();
         setEnvStatus(status);
         
-        if (!status.python_available) {
-          setError(t('errors.python_not_available'));
+        if (!status.system_available) {
+          setError('系统环境检查失败，某些功能可能无法正常使用。');
         }
         
       } catch (err) {

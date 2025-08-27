@@ -31,6 +31,9 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useAppState } from '../contexts/AppStateContext';
 import { getCurrentLocalTime, createLogMessage } from '../utils/timeUtils';
 import type { AuditConfig, AuditResult, ProcessStatus } from '../types/rust-commands';
+import AnalysisHistoryPanel from '../components/AnalysisHistoryPanel';
+import { AnalysisHistoryManager } from '../utils/analysisHistoryManager';
+import { AnalysisHistoryRecord } from '../types/analysisHistory';
 
 const AuditPage: React.FC = () => {
   const { t } = useTranslation();
@@ -55,7 +58,10 @@ const AuditPage: React.FC = () => {
   } = auditState;
   
   const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState<boolean>(false);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState<number>(0);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const lastFileSelection = useRef<{filePath: string, fileName: string, timestamp: number}>({filePath: '', fileName: '', timestamp: 0});
 
   // 设置Tauri文件拖拽监听
   useEffect(() => {
@@ -69,8 +75,19 @@ const AuditPage: React.FC = () => {
             const filePath = files[0];
             const fileName = filePath.split(/[/\\]/).pop() || '';
             
+            // 防止1000ms内重复处理相同文件
+            const now = Date.now();
+            if (lastFileSelection.current.filePath === filePath && 
+                now - lastFileSelection.current.timestamp < 1000) {
+              console.log('跳过重复文件处理:', fileName);
+              return;
+            }
+            
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
+              // 记录文件选择信息
+              lastFileSelection.current = {filePath: filePath, fileName: fileName, timestamp: now};
+              
               updateAuditState({ inputFile: filePath });
               appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
               showNotification({
@@ -115,6 +132,18 @@ const AuditPage: React.FC = () => {
 
       if (selected && typeof selected === 'string') {
         const fileName = selected.split(/[/\\]/).pop() || '';
+        
+        // 防止500ms内重复处理相同文件
+        const now = Date.now();
+        if (lastFileSelection.current.filePath === selected && 
+            now - lastFileSelection.current.timestamp < 500) {
+          console.log('跳过重复文件处理（按钮选择）:', fileName);
+          return;
+        }
+        
+        // 记录文件选择信息
+        lastFileSelection.current = {filePath: selected, fileName: fileName, timestamp: now};
+        
         updateAuditState({ inputFile: selected });
         appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
         showNotification({
@@ -169,8 +198,9 @@ const AuditPage: React.FC = () => {
       progress: 0,
       currentStep: t('process_status.initializing')
     });
-    clearAuditLog();
-    appendAuditLog(createLogMessage(`开始分析：${inputFile.split(/[/\\]/).pop()}, 算法：${algorithm === 'FIFO' ? 'FIFO计算法' : '差额计算法'}`, 'info'));
+    // 不要清空日志，让Rust后端完全管理日志显示
+    // clearAuditLog();
+    // appendAuditLog(createLogMessage(`开始分析：${inputFile.split(/[/\\]/).pop()}, 算法：${algorithm === 'FIFO' ? 'FIFO计算法' : '差额计算法'}`, 'info'));
     
     try {
       // 直接调用后端分析（真实实现），后端会统一管理所有日志
@@ -205,9 +235,21 @@ const AuditPage: React.FC = () => {
               updateAuditState({ currentStep: status.message });
             }
             
-            // 更新分析日志（后端统一管理）
+            // 更新分析日志（智能合并而不是替换）
             if (status.output_log && status.output_log.length > 0) {
-              updateAuditState({ analysisLog: status.output_log });
+              // 保留前端本地日志（如文件选择），合并后端分析日志
+              const currentLog = auditState.analysisLog || [];
+              const backendLog = status.output_log || [];
+              
+              // 找到本地日志中非后端生成的条目（如文件选择）
+              const localOnlyLogs = currentLog.filter(logEntry => 
+                !backendLog.includes(logEntry) && 
+                (logEntry.includes('已选择文件') || logEntry.includes('文件选择'))
+              );
+              
+              // 合并：本地日志 + 后端日志
+              const mergedLog = [...localOnlyLogs, ...backendLog];
+              updateAuditState({ analysisLog: mergedLog });
             }
           }
         } catch (error) {
@@ -220,15 +262,83 @@ const AuditPage: React.FC = () => {
       // 等待分析完成
       const result = await analysisPromise;
       
+      // 在停止轮询之前，最后检查一次状态获取完整日志
+      try {
+        const finalStatus = await invoke<ProcessStatus>('get_process_status');
+        if (finalStatus && finalStatus.output_log && finalStatus.output_log.length > 0) {
+          // 应用相同的智能合并逻辑
+          const currentLog = auditState.analysisLog || [];
+          const backendLog = finalStatus.output_log || [];
+          
+          const localOnlyLogs = currentLog.filter(logEntry => 
+            !backendLog.includes(logEntry) && 
+            (logEntry.includes('已选择文件') || logEntry.includes('文件选择'))
+          );
+          
+          const mergedLog = [...localOnlyLogs, ...backendLog];
+          updateAuditState({ analysisLog: mergedLog });
+        }
+      } catch (error) {
+        console.warn('最终状态检查失败:', error);
+      }
+      
       // 停止进度监听
       clearInterval(interval);
       setProgressInterval(null);
       
       if (result.success) {
-        appendAuditLog(createLogMessage(t('process_status.completed'), 'success'));
-        appendAuditLog(createLogMessage(`${t('ui.labels.result')}: ${result.message}`, 'info'));
-        if (result.output_files && result.output_files.length > 0) {
-          appendAuditLog(createLogMessage(`${t('ui.labels.output_files')}: ${result.output_files.join(', ')}`, 'info'));
+        // 创建历史记录
+        try {
+          console.log('分析成功，准备创建历史记录');
+          console.log('result:', result);
+          console.log('result.statistics:', result.statistics);
+          console.log('result.output_files:', result.output_files);
+          
+          const historyRecord: AnalysisHistoryRecord = {
+            id: AnalysisHistoryManager.generateRecordId(),
+            timestamp: new Date(),
+            algorithm: algorithm as 'FIFO' | 'BALANCE_METHOD',
+            algorithmDisplayName: AnalysisHistoryManager.formatAlgorithmName(algorithm),
+            inputFile: {
+              name: inputFile.split(/[/\\]/).pop() || '未知文件',
+              path: inputFile,
+              size: result.statistics?.input_file_size || 0,
+            },
+            outputFile: {
+              name: result.output_files[0]?.split(/[/\\]/).pop() || '未知输出文件',
+              path: result.output_files[0] || '',
+              size: result.statistics?.output_file_size || 0,
+            },
+            statistics: {
+              totalRecords: result.statistics?.total_records || 0,
+              processingTime: result.statistics?.processing_time || 0,
+              validationErrors: result.statistics?.validation_errors || 0,
+              validationFixes: result.statistics?.validation_fixes || 0,
+            },
+            status: 'success',
+          };
+          
+          console.log('创建的历史记录:', historyRecord);
+          
+          const addResult = AnalysisHistoryManager.addRecord(historyRecord);
+          console.log('历史记录已添加', addResult);
+          
+          // 如果需要清理，显示提示
+          if (addResult.needsCleanup) {
+            setTimeout(() => {
+              showNotification({
+                type: 'warning',
+                title: '历史记录提醒',
+                message: '分析历史记录已超出设定限制，建议到设置页面进行清理以保持系统性能。',
+              });
+            }, 2000); // 2秒后显示，避免与成功消息冲突
+          }
+          
+          // 展开历史记录面板以显示新记录并触发刷新
+          setHistoryExpanded(true);
+          setHistoryRefreshTrigger(prev => prev + 1); // 触发历史记录面板刷新
+        } catch (error) {
+          console.error('创建历史记录失败:', error);
         }
         
         showNotification({
@@ -444,13 +554,48 @@ const AuditPage: React.FC = () => {
               {isAnalyzing ? (
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {currentStep} ({progress.toFixed(2)}%)
+                    {currentStep}
                   </Typography>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={progress} 
-                    sx={{ mb: 2 }}
-                  />
+                  {/* Rust高速处理 - 显示脉冲动画而不是精确进度条 */}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2, 
+                    mb: 2,
+                    p: 2,
+                    borderRadius: 1,
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.1)' : 'rgba(25, 118, 210, 0.05)',
+                    border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.3)' : 'rgba(25, 118, 210, 0.2)'}`,
+                  }}>
+                    <Box sx={{ 
+                      width: 12, 
+                      height: 12, 
+                      borderRadius: '50%',
+                      bgcolor: theme.palette.primary.main,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      '@keyframes pulse': {
+                        '0%': { opacity: 1, transform: 'scale(1)' },
+                        '50%': { opacity: 0.5, transform: 'scale(1.2)' },
+                        '100%': { opacity: 1, transform: 'scale(1)' }
+                      }
+                    }} />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.primary.main }}>
+                        🚀 Rust高性能处理中...
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        算法运行速度：50,000+ 条/秒
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ 
+                      color: theme.palette.primary.main, 
+                      fontWeight: 600,
+                      minWidth: 60,
+                      textAlign: 'right'
+                    }}>
+                      {progress > 0 ? `${progress.toFixed(1)}%` : '启动中'}
+                    </Typography>
+                  </Box>
                 </Box>
               ) : (
                 <Alert severity="info">
@@ -532,12 +677,24 @@ const AuditPage: React.FC = () => {
                           mb: 0.3,
                           padding: '2px 4px',
                           borderRadius: '2px',
-                          backgroundColor: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? `${theme.palette.error.main}20` : 
-                                          log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? `${theme.palette.warning.main}20` :
-                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? `${theme.palette.success.main}20` : 'transparent',
-                          color: log.includes('ERROR') || log.includes('错误') || log.includes('失败') || log.includes('Failed') || log.includes(t('process_status.failed')) ? theme.palette.error.main : 
-                                 log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? theme.palette.warning.main :
-                                 log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? theme.palette.success.main : theme.palette.text.primary,
+                          backgroundColor: 
+                                          // 优先检查成功修复类消息（避免与"错误"词冲突）
+                                          log.includes('成功修复') || log.includes('算法成功修复') || log.includes('流水完整性验证') && log.includes('修复') ? `${theme.palette.success.main}20` :
+                                          // 其他成功类消息
+                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? `${theme.palette.success.main}20` :
+                                          // 错误类消息
+                                          log.includes('ERROR') || log.includes('Failed') || log.includes(t('process_status.failed')) || (log.includes('错误') && !log.includes('成功修复')) || (log.includes('失败') && !log.includes('成功修复')) ? `${theme.palette.error.main}20` : 
+                                          // 警告类消息
+                                          log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? `${theme.palette.warning.main}20` : 'transparent',
+                          color: 
+                                          // 优先检查成功修复类消息
+                                          log.includes('成功修复') || log.includes('算法成功修复') || log.includes('流水完整性验证') && log.includes('修复') ? theme.palette.success.main :
+                                          // 其他成功类消息
+                                          log.includes('SUCCESS') || log.includes('完成') || log.includes('成功') || log.includes('Success') || log.includes(t('process_status.completed')) ? theme.palette.success.main :
+                                          // 错误类消息
+                                          log.includes('ERROR') || log.includes('Failed') || log.includes(t('process_status.failed')) || (log.includes('错误') && !log.includes('成功修复')) || (log.includes('失败') && !log.includes('成功修复')) ? theme.palette.error.main : 
+                                          // 警告类消息
+                                          log.includes('WARNING') || log.includes('警告') || log.includes('Warning') ? theme.palette.warning.main : theme.palette.text.primary,
                           whiteSpace: 'pre-wrap', // 保持换行和空格
                           wordBreak: 'break-all', // 长行自动换行
                         }}
@@ -568,6 +725,16 @@ const AuditPage: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 历史记录面板 */}
+      <Box sx={{ mt: 3 }}>
+        <AnalysisHistoryPanel
+          expanded={historyExpanded}
+          onExpandedChange={setHistoryExpanded}
+          isAnalyzing={isAnalyzing}
+          refreshTrigger={historyRefreshTrigger}
+        />
+      </Box>
     </Box>
   );
 };

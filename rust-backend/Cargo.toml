@@ -7,6 +7,10 @@ authors = ["审计团队"]
 license = "MIT"
 
 [[bin]]
+name = "audit-cli"
+path = "src/bin/main.rs"
+
+[[bin]]
 name = "test_excel_read"
 path = "src/bin/test_excel_read.rs"
 
@@ -42,6 +46,9 @@ rust_xlsxwriter = "0.76"  # Excel写入，纯Rust实现，比xlsxwriter更好
 
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
+
+# 随机数生成（用于临时文件名）
+rand = "0.8"
 
 # 精确小数计算
 rust_decimal = { version = "1.35", features = ["serde"] }

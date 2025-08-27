@@ -17,6 +17,19 @@ export interface AuditResult {
   message: string;
   data?: any;
   output_files: string[];
+  statistics?: AnalysisStatistics;
+  error?: string;
+}
+
+export interface AnalysisStatistics {
+  total_records: number;
+  processing_time: number; // 毫秒
+  validation_errors: number;
+  validation_fixes: number;
+  algorithm: string;
+  input_file_name: string;
+  input_file_size: number;
+  output_file_size?: number;
 }
 
 export interface TimePointQuery {
@@ -129,10 +142,10 @@ export class RustCommands {
   }
 
   /**
-   * 检查Python环境
+   * 检查系统环境
    */
-  static async checkPythonEnv(): Promise<any> {
-    return invoke<any>('check_python_env');
+  static async checkSystemEnv(): Promise<any> {
+    return invoke<any>('check_system_env');
   }
 
   /**
@@ -219,7 +232,7 @@ export const {
   getAlgorithms,
   runAudit,
   timePointQuery,
-  checkPythonEnv,
+  checkSystemEnv,
   getQueryHistory,
   clearQueryHistory,
   deleteQueryHistoryItem,

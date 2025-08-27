@@ -4,6 +4,7 @@
  */
 
 import type { QueryHistory } from '../types/app';
+import { AnalysisHistoryManager } from './analysisHistoryManager';
 
 /**
  * 存储键名常量
@@ -88,11 +89,26 @@ class LocalStorageManager implements StorageManager {
 export const storage = new LocalStorageManager();
 
 /**
+ * 获取用户设置的最大历史记录数量
+ */
+export function getUserMaxHistoryCount(): number {
+  try {
+    const settings = localStorage.getItem('app-settings');
+    if (settings) {
+      const parsed = JSON.parse(settings);
+      return parsed.maxHistoryRecords || 100;
+    }
+  } catch (error) {
+    console.warn('Failed to get user max history count:', error);
+  }
+  return 100; // 默认值
+}
+
+/**
  * 查询历史数据的序列化和反序列化
  */
 export class QueryHistoryStorage {
   private static readonly STORAGE_KEY = STORAGE_KEYS.QUERY_HISTORY;
-  private static readonly MAX_HISTORY_COUNT = 100;
 
   /**
    * 序列化查询历史数据
@@ -121,15 +137,17 @@ export class QueryHistoryStorage {
    */
   static save(history: QueryHistory[]): boolean {
     try {
-      // 限制历史记录数量
-      const limitedHistory = history.slice(0, this.MAX_HISTORY_COUNT);
+      // 使用用户设置的限制历史记录数量
+      const maxHistoryCount = getUserMaxHistoryCount();
+      const limitedHistory = history.slice(0, maxHistoryCount);
       const serializedData = this.serialize(limitedHistory);
       
       return storage.set(this.STORAGE_KEY, {
         data: serializedData,
         version: '1.0',
         savedAt: new Date().toISOString(),
-        count: limitedHistory.length
+        count: limitedHistory.length,
+        maxAllowed: maxHistoryCount
       });
     } catch (error) {
       console.error('Failed to save query history:', error);
@@ -174,6 +192,57 @@ export class QueryHistoryStorage {
   }
 
   /**
+   * 获取指定时间范围内的查询历史
+   */
+  static getRecordsInTimeRange(startDate: Date, endDate: Date): QueryHistory[] {
+    const allHistory = this.load();
+    return allHistory.filter(record => {
+      const recordDate = new Date(record.timestamp);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+  }
+
+  /**
+   * 删除指定时间范围内的查询历史
+   */
+  static deleteRecordsInTimeRange(startDate: Date, endDate: Date): { deleted: number; remaining: QueryHistory[] } {
+    const allHistory = this.load();
+    const toDelete = allHistory.filter(record => {
+      const recordDate = new Date(record.timestamp);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+    
+    const remaining = allHistory.filter(record => {
+      const recordDate = new Date(record.timestamp);
+      return recordDate < startDate || recordDate > endDate;
+    });
+
+    this.save(remaining);
+    
+    return {
+      deleted: toDelete.length,
+      remaining
+    };
+  }
+
+  /**
+   * 批量删除指定的记录
+   */
+  static deleteRecordsByIds(recordIds: string[]): { deleted: number; remaining: QueryHistory[] } {
+    const allHistory = this.load();
+    const remaining = allHistory.filter(record => 
+      !recordIds.includes(record.id || `${record.fileName}_${record.rowNumber}_${record.algorithm}`)
+    );
+
+    this.save(remaining);
+
+    return {
+      deleted: allHistory.length - remaining.length,
+      remaining
+    };
+  }
+
+  /**
    * 获取存储统计信息
    */
   static getStats(): { count: number; lastSaved?: string; version?: string } {
@@ -192,10 +261,11 @@ export class QueryHistoryStorage {
 
   /**
    * 添加单个历史记录
-   * 自动处理重复检测和数量限制
+   * 自动处理重复检测，允许超出限制但会提示用户
    */
-  static addRecord(newRecord: QueryHistory): QueryHistory[] {
+  static addRecord(newRecord: QueryHistory): { history: QueryHistory[]; needsCleanup: boolean } {
     const currentHistory = this.load();
+    const maxHistoryCount = getUserMaxHistoryCount();
     
     // 检查是否已存在相同的记录（基于文件名、行号、算法）
     const exists = currentHistory.some(item => 
@@ -221,13 +291,14 @@ export class QueryHistoryStorage {
       updatedHistory = [newRecord, ...currentHistory];
     }
 
-    // 限制数量
-    updatedHistory = updatedHistory.slice(0, this.MAX_HISTORY_COUNT);
-
-    // 保存到存储
+    // 总是保存新记录，但检查是否需要提示清理
+    const needsCleanup = updatedHistory.length > maxHistoryCount;
     this.save(updatedHistory);
 
-    return updatedHistory;
+    return { 
+      history: updatedHistory,
+      needsCleanup 
+    };
   }
 }
 
@@ -261,34 +332,191 @@ export class DataMigration {
 }
 
 /**
- * 清理工具
+ * 分析历史记录存储统计工具
  */
-export class DataCleanup {
+export class AnalysisHistoryStorage {
   /**
-   * 清理过期数据
+   * 检查是否需要清理分析历史记录
    */
-  static cleanupExpiredData(): void {
+  static checkNeedsCleanup(): boolean {
+    const maxHistoryCount = getUserMaxHistoryCount();
+    const history = AnalysisHistoryManager.getHistory();
+    return history.records.length > maxHistoryCount;
+  }
+  /**
+   * 获取分析历史统计信息
+   */
+  static getStats(): { count: number; lastAnalysis?: string; totalSize?: number } {
     try {
-      const stats = QueryHistoryStorage.getStats();
+      const history = AnalysisHistoryManager.getHistory();
       
-      // 如果历史记录过多，保留最新的50条
-      if (stats.count > 50) {
-        const history = QueryHistoryStorage.load();
-        const recentHistory = history.slice(0, 50);
-        QueryHistoryStorage.save(recentHistory);
-        console.log(`Cleaned up query history: kept ${recentHistory.length} recent records`);
+      if (!history || history.records.length === 0) {
+        return { count: 0 };
       }
+
+      // 计算总文件大小（输出文件）
+      const totalSize = history.records.reduce((sum, record) => {
+        return sum + (record.outputFile?.size || 0);
+      }, 0);
+
+      // 获取最近分析时间
+      const lastAnalysis = history.records.length > 0 
+        ? history.records[0].timestamp.toISOString()
+        : undefined;
+
+      return {
+        count: history.records.length,
+        lastAnalysis,
+        totalSize
+      };
     } catch (error) {
-      console.error('Failed to cleanup expired data:', error);
+      console.error('Failed to get analysis history stats:', error);
+      return { count: 0 };
     }
   }
 
   /**
+   * 清理分析历史记录
+   */
+  static clear(): boolean {
+    try {
+      const history = AnalysisHistoryManager.getHistory();
+      
+      // 删除所有历史记录（这会触发文件删除）
+      const deletePromises = history.records.map(record => 
+        AnalysisHistoryManager.deleteRecord(record.id)
+      );
+      
+      // 等待所有删除操作完成（异步）
+      Promise.all(deletePromises).then(() => {
+        console.log('All analysis history records deleted');
+      }).catch(error => {
+        console.warn('Some analysis files could not be deleted:', error);
+      });
+      
+      // 立即清空本地存储
+      localStorage.removeItem('analysis-history');
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to clear analysis history:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 清理过期的分析记录（保留最新N条）
+   */
+  static cleanupOldRecords(keepCount: number = 20): number {
+    try {
+      const history = AnalysisHistoryManager.getHistory();
+      
+      if (history.records.length <= keepCount) {
+        return 0; // 不需要清理
+      }
+
+      const recordsToDelete = history.records.slice(keepCount);
+      let deletedCount = 0;
+
+      // 删除多余的记录
+      recordsToDelete.forEach(record => {
+        AnalysisHistoryManager.deleteRecord(record.id).then(success => {
+          if (success) deletedCount++;
+        }).catch(console.warn);
+      });
+
+      console.log(`Cleaned up ${recordsToDelete.length} old analysis records`);
+      return recordsToDelete.length;
+    } catch (error) {
+      console.error('Failed to cleanup old analysis records:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * 获取指定时间范围内的分析历史
+   */
+  static getRecordsInTimeRange(startDate: Date, endDate: Date): any[] {
+    try {
+      const history = AnalysisHistoryManager.getHistory();
+      return history.records.filter(record => {
+        const recordDate = new Date(record.timestamp);
+        return recordDate >= startDate && recordDate <= endDate;
+      });
+    } catch (error) {
+      console.error('Failed to get analysis records in time range:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 删除指定时间范围内的分析历史
+   */
+  static async deleteRecordsInTimeRange(startDate: Date, endDate: Date): Promise<{ deleted: number; remaining: number }> {
+    try {
+      const history = AnalysisHistoryManager.getHistory();
+      const toDelete = history.records.filter(record => {
+        const recordDate = new Date(record.timestamp);
+        return recordDate >= startDate && recordDate <= endDate;
+      });
+
+      let deletedCount = 0;
+      
+      // 逐个删除记录（包括对应的文件）
+      for (const record of toDelete) {
+        const success = await AnalysisHistoryManager.deleteRecord(record.id);
+        if (success) deletedCount++;
+      }
+
+      const remainingHistory = AnalysisHistoryManager.getHistory();
+      
+      return {
+        deleted: deletedCount,
+        remaining: remainingHistory.records.length
+      };
+    } catch (error) {
+      console.error('Failed to delete analysis records in time range:', error);
+      return { deleted: 0, remaining: 0 };
+    }
+  }
+
+  /**
+   * 批量删除指定的分析记录
+   */
+  static async deleteRecordsByIds(recordIds: string[]): Promise<{ deleted: number; remaining: number }> {
+    try {
+      let deletedCount = 0;
+      
+      for (const recordId of recordIds) {
+        const success = await AnalysisHistoryManager.deleteRecord(recordId);
+        if (success) deletedCount++;
+      }
+
+      const remainingHistory = AnalysisHistoryManager.getHistory();
+      
+      return {
+        deleted: deletedCount,
+        remaining: remainingHistory.records.length
+      };
+    } catch (error) {
+      console.error('Failed to delete analysis records by ids:', error);
+      return { deleted: 0, remaining: 0 };
+    }
+  }
+}
+
+/**
+ * 数据清理工具
+ */
+export class DataCleanup {
+  /**
    * 完全重置应用数据
+   * 清空所有历史记录和应用设置
    */
   static resetAllData(): boolean {
     try {
       QueryHistoryStorage.clear();
+      AnalysisHistoryStorage.clear();
       storage.remove(STORAGE_KEYS.USER_SETTINGS);
       storage.remove(STORAGE_KEYS.APP_VERSION);
       console.log('All application data has been reset');

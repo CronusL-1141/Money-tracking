@@ -95,3 +95,10 @@ config/personal/
 *.7z
 Portal.zip
 **/target/
+
+# 开发阶段文档（保留本地，不上传）
+ARCHITECTURE_VISUAL_GUIDE.md
+QUICK_START.md
+STAGE_1_TOOL_LAYER_VALIDATION_SUMMARY.md
+# 开发测试目录
+tests/

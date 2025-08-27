@@ -119,13 +119,24 @@ export const AppStateProvider: React.FC<AppStateProviderProps> = ({ children }) 
     setQueryState(defaultQueryState);
   }, []);
 
-  const addQueryHistory = useCallback((item: any) => {
+  const addQueryHistory = useCallback((item: any, showNotification?: (notification: any) => void) => {
     // 使用存储工具自动处理去重和保存
-    const updatedHistory = QueryHistoryStorage.addRecord(item);
+    const result = QueryHistoryStorage.addRecord(item);
+    
+    // 如果需要清理且有通知函数，显示提示
+    if (result.needsCleanup && showNotification) {
+      setTimeout(() => {
+        showNotification({
+          type: 'warning',
+          title: '历史记录提醒',
+          message: '查询历史记录已超出设定限制，建议到设置页面进行清理以保持系统性能。',
+        });
+      }, 1500);
+    }
     
     setQueryState(prev => ({
       ...prev,
-      history: updatedHistory
+      history: result.history
     }));
   }, []);
 
@@ -164,9 +175,6 @@ export const AppStateProvider: React.FC<AppStateProviderProps> = ({ children }) 
         if (DataMigration.needsMigration()) {
           DataMigration.migrate();
         }
-
-        // 清理过期数据
-        DataCleanup.cleanupExpiredData();
 
         // 从本地存储加载查询历史
         const savedHistory = QueryHistoryStorage.load();

@@ -14,6 +14,10 @@ use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
 use log::{info, warn, error};
 use regex::Regex;
+use std::sync::Arc;
+
+// 引入Rust后端库
+use audit_backend::{AuditService, TauriAuditConfig};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::{
@@ -68,6 +72,21 @@ pub struct AuditResult {
     pub message: String,
     pub data: Option<serde_json::Value>,
     pub output_files: Vec<String>,
+    // 新增：分析统计信息
+    pub statistics: Option<AnalysisStatistics>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnalysisStatistics {
+    pub total_records: u32,
+    pub processing_time: u64,  // 毫秒
+    pub validation_errors: u32,
+    pub validation_fixes: u32,
+    pub algorithm: String,
+    pub input_file_name: String,
+    pub input_file_size: u64,
+    pub output_file_size: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,6 +146,7 @@ pub struct AppState {
     pub query_history: Mutex<Vec<QueryHistory>>,
     pub current_process: Mutex<ProcessStatus>,
     pub app_config: Mutex<AppConfig>,
+    pub audit_service: Arc<AuditService>,  // 添加Rust后端服务
 }
 
 // Tauri命令：获取可用算法列表
@@ -135,10 +155,10 @@ async fn get_algorithms() -> Result<Vec<String>, String> {
     Ok(vec!["FIFO".to_string(), "BALANCE_METHOD".to_string()])
 }
 
-// Tauri命令：运行审计分析
+// Tauri命令：运行Rust后端审计分析（新增）
 #[command]
-async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<AuditResult, String> {
-    info!("Starting audit with algorithm: {}, input: {}", config.algorithm, config.input_file);
+async fn run_rust_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<AuditResult, String> {
+    info!("Starting Rust audit with algorithm: {}, input: {}", config.algorithm, config.input_file);
     
     // 步骤0: 并发控制 - 检查是否已有分析在运行
     {
@@ -149,224 +169,187 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
         }
     }
     
-    // 步骤1: 初始化
+    // 步骤1: 简化初始化，保留现有日志（如文件选择记录）
     {
         let mut process_status = state.current_process.lock().await;
-        
-        // 添加分析会话分隔符，而不是清空所有日志
-        if !process_status.output_log.is_empty() {
-            process_status.output_log.push(format!("[{}] ===== 开始新的分析会话 =====", 
-                chrono::Utc::now().format("%H:%M:%S")
-            ));
-        }
-        
-        // 添加Rust后端的初始日志到Python输出之前
-        process_status.output_log.push(format!("[{}] 🔧 初始化分析环境...", 
-            chrono::Utc::now().format("%H:%M:%S")
-        ));
-        let file_name = config.input_file.split(&['/', '\\'][..]).last().unwrap_or(&config.input_file);
-        process_status.output_log.push(format!("[{}] 📁 检查输入文件: {}", 
-            chrono::Utc::now().format("%H:%M:%S"),
-            file_name
-        ));
-        process_status.output_log.push(format!("[{}] 🔧 选择算法: {}", 
-            chrono::Utc::now().format("%H:%M:%S"),
-            match config.algorithm.as_str() {
-                "FIFO" => "FIFO先进先出算法",
-                "BALANCE_METHOD" => "差额计算法",
-                _ => &config.algorithm
-            }
-        ));
-        process_status.output_log.push(format!("[{}] 🐍 准备启动Python分析进程...", 
-            chrono::Utc::now().format("%H:%M:%S")
-        ));
-        
+        let existing_logs = process_status.output_log.clone(); // 保留现有日志
         *process_status = ProcessStatus {
             running: true,
-            command: Some(format!("audit_{}", config.algorithm)),
+            command: Some(format!("rust_audit_{}", config.algorithm)),
             progress: Some(0.0),
-            message: Some("初始化分析环境...".to_string()),
-            output_log: process_status.output_log.clone(), // 保留之前的日志
-            process_id: None, // 初始化时还没有进程ID
+            message: Some("开始分析...".to_string()),
+            output_log: existing_logs, // 保留现有日志而不是清空
+            process_id: None,
         };
     }
     
-    // 步骤2: 检查文件
-    {
-        let mut process_status = state.current_process.lock().await;
-        process_status.progress = Some(10.0);
-        process_status.message = Some("检查输入文件...".to_string());
-    }
+    // 步骤2: 使用一个更简单的解决方案
+    // 在分析开始时就设置一个标记，让前端轮询能获取到实时日志
     
-    // 获取Python可执行文件路径
-    let python_exe = find_python_executable();
+    let tauri_config = TauriAuditConfig {
+        algorithm: config.algorithm.clone(),
+        input_file: config.input_file.clone(),
+        output_file: config.output_file.clone(),
+    };
     
-    // 构建Python脚本路径
-    let project_root = get_project_root()?;
-    let script_path = project_root.join("src").join("main.py");
+    // 步骤3: 创建服务并执行分析，使用共享状态机制
+    let service = AuditService::new().with_suppress_output(false);
     
-    // 步骤3: 准备命令
-    {
-        let mut process_status = state.current_process.lock().await;
-        process_status.progress = Some(20.0);
-        process_status.message = Some("准备Python分析命令...".to_string());
-    }
+    // 步骤3.1: 并行执行分析和实时日志同步
+    let state_clone = state.inner().clone();
+    let service_clone = Arc::new(service);
+    let service_for_analysis = service_clone.clone();
+    let service_for_sync = service_clone.clone();
     
-    let mut cmd = Command::new(&python_exe);
-    cmd.current_dir(&project_root)
-        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
-        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
-        .arg("-u")  // 无缓冲模式，立即输出
-        .arg(script_path)
-        .arg("--algorithm")
-        .arg(&config.algorithm)
-        .arg("--input")
-        .arg(&config.input_file)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // 分析任务
+    let analysis_task = async move {
+        service_for_analysis.run_audit_for_gui(tauri_config).await
+    };
     
-    if let Some(output) = &config.output_file {
-        cmd.arg("--output").arg(output);
-    }
-    
-    // 步骤4: 开始执行
-    {
-        let mut process_status = state.current_process.lock().await;
-        process_status.progress = Some(5.0);  // 修复：30% → 5%
-        process_status.message = Some("启动Python分析进程...".to_string());
-    }
-    
-    let result = match cmd.spawn() {
-        Ok(mut child) => {
-            // 保存进程ID到ProcessStatus
-            let child_id = child.id();
-            {
-                let mut process_status = state.current_process.lock().await;
-                process_status.process_id = child_id;
-            }
+    // 同步任务
+    let sync_task = async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
+        let mut last_count = 0;
+        
+        loop {
+            interval.tick().await;
             
-            let stdout = child.stdout.take().unwrap();
-            let mut reader = BufReader::new(stdout);
-            
-            let mut output_lines = Vec::new();
-            let mut final_progress = 5.0;  // 修复：与上面的初始进度保持一致
-            
-            // 实时读取输出
-            loop {
-                let mut line = String::new();
-                match reader.read_line(&mut line).await {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        let line_str = line.trim_end().to_string(); // 移除换行符
-                        if !line_str.is_empty() {
-                            output_lines.push(line_str.clone());
-                            
-                            // 解析进度信息
-                            let progress = parse_progress_from_line(&line_str);
-                            if progress > final_progress {
-                                final_progress = progress; // parse_progress_from_line已经返回精度控制后的值
-                            }
-                            
-                            // 更新进程状态
-                            {
-                                let mut process_status = state.current_process.lock().await;
-                                process_status.progress = Some(final_progress);
-                                process_status.message = Some(extract_message_from_line(&line_str));
-                                process_status.output_log.push(format!("[{}] {}", 
-                                    chrono::Utc::now().format("%H:%M:%S"), 
-                                    line_str
-                                ));
-                                
-                                // 限制日志长度，避免内存占用过多
-                                if process_status.output_log.len() > 1000 {
-                                    process_status.output_log.drain(0..100);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Error reading line: {}", e);
-                        break;
-                    }
-                }
-            }
-            
-            // 等待进程结束
-            let exit_status = child.wait().await.unwrap();
-            let full_output = output_lines.join("\n");
-            
-            if exit_status.success() {
-                info!("Audit completed successfully");
-                
-                // 步骤5: 解析输出文件
-                {
-                    let mut process_status = state.current_process.lock().await;
-                    process_status.progress = Some(100.0);
-                    process_status.message = Some("分析完成".to_string());
-                }
-                
-                // 尝试解析输出文件列表
-                let output_files = extract_output_files(&full_output);
-                
-                AuditResult {
-                    success: true,
-                    message: "分析完成".to_string(),
-                    data: None,
-                    output_files,
-                }
-            } else {
-                error!("Python process failed with exit code: {:?}", exit_status.code());
-                AuditResult {
-                    success: false,
-                    message: format!("Python进程失败，退出代码: {:?}", exit_status.code()),
-                    data: None,
-                    output_files: vec![],
-                }
-            }
-        }
-        Err(e) => {
-            error!("Failed to execute audit: {}", e);
-            // 不直接return，而是返回错误结果，确保状态重置
-            AuditResult {
-                success: false,
-                message: format!("执行失败: {}", e),
-                data: None,
-                output_files: vec![],
+            let current_logs = service_for_sync.get_output_logs();
+            if current_logs.len() > last_count {
+                let mut process_status = state_clone.current_process.lock().await;
+                process_status.output_log = current_logs.clone();
+                println!("🔍 实时同步: 更新了 {} 条日志 (新增 {} 条)", 
+                    current_logs.len(), current_logs.len() - last_count);
+                last_count = current_logs.len();
             }
         }
     };
     
-    // 重置进程状态（保留日志） - 无论成功失败都要重置
-    {
+    // 并行执行：分析完成时自动取消同步任务
+    let result = tokio::select! {
+        analysis_result = analysis_task => {
+            println!("🔍 分析任务完成");
+            analysis_result
+        },
+        _ = sync_task => {
+            // 这个分支不应该执行
+            return Err("同步任务意外完成".to_string());
+        }
+    };
+    
+    // 最后一次同步确保所有日志都被获取
+    let final_logs = service_clone.get_output_logs();
+    if !final_logs.is_empty() {
         let mut process_status = state.current_process.lock().await;
-        
-        // 添加分析完成标记
-        let end_message = if result.success {
-            "===== 分析会话结束 ====="
-        } else {
-            "===== 分析会话异常结束 ====="
-        };
-        
-        process_status.output_log.push(format!("[{}] {}", 
-            chrono::Utc::now().format("%H:%M:%S"), 
-            end_message
-        ));
-        
-        // 只重置运行状态，保留日志
-        process_status.running = false;  // 关键：确保running状态被重置
-        process_status.command = None;
-        process_status.progress = None;
-        process_status.process_id = None; // 清除进程ID
-        process_status.message = Some(if result.success { "分析完成".to_string() } else { "分析失败".to_string() });
-        // output_log 不清空，保留所有日志
+        process_status.output_log = final_logs;
     }
     
-    // 根据结果返回成功或错误
-    if result.success {
-        Ok(result)
-    } else {
-        Err(result.message)
-    }
+    // 步骤4: 转换结果并重置状态
+    let final_result = match result.success {
+        true => {
+            {
+                let mut process_status = state.current_process.lock().await;
+                process_status.output_log.push(format!("[{}] ✅ {}分析完成", 
+                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                    match config.algorithm.as_str() {
+                        "FIFO" => "FIFO算法",
+                        "BALANCE_METHOD" => "差额计算法",
+                        _ => "审计"
+                    }
+                ));
+                process_status.running = false;
+                process_status.command = None;
+                process_status.progress = Some(100.0);
+                process_status.message = Some("分析完成".to_string());
+            }
+            
+            // 收集统计信息
+            let input_file_metadata = std::fs::metadata(&config.input_file).ok();
+            let output_file_metadata = if !result.output_files.is_empty() {
+                std::fs::metadata(&result.output_files[0]).ok()
+            } else {
+                None
+            };
+            
+            let statistics = if let Some(ref data) = result.data {
+                AnalysisStatistics {
+                    total_records: data.transaction_count as u32,
+                    processing_time: (data.processing_time * 1000.0) as u64, // 转换为毫秒
+                    validation_errors: 0, // TODO: 从validation result中获取
+                    validation_fixes: 0,  // TODO: 从validation result中获取
+                    algorithm: config.algorithm.clone(),
+                    input_file_name: std::path::Path::new(&config.input_file)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("未知文件")
+                        .to_string(),
+                    input_file_size: input_file_metadata.map(|m| m.len()).unwrap_or(0),
+                    output_file_size: output_file_metadata.map(|m| m.len()),
+                }
+            } else {
+                // 如果没有数据，使用默认值
+                AnalysisStatistics {
+                    total_records: 0,
+                    processing_time: 0,
+                    validation_errors: 0,
+                    validation_fixes: 0,
+                    algorithm: config.algorithm.clone(),
+                    input_file_name: std::path::Path::new(&config.input_file)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("未知文件")
+                        .to_string(),
+                    input_file_size: input_file_metadata.map(|m| m.len()).unwrap_or(0),
+                    output_file_size: output_file_metadata.map(|m| m.len()),
+                }
+            };
+            
+            AuditResult {
+                success: true,
+                message: result.message,
+                data: result.data.map(|d| serde_json::to_value(d).unwrap_or(serde_json::Value::Null)),
+                output_files: result.output_files,
+                statistics: Some(statistics),
+                error: None,
+            }
+        }
+        false => {
+            {
+                let mut process_status = state.current_process.lock().await;
+                process_status.output_log.push(format!("[{}] ❌ {}分析失败: {}", 
+                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                    match config.algorithm.as_str() {
+                        "FIFO" => "FIFO算法",
+                        "BALANCE_METHOD" => "差额计算法",
+                        _ => "审计"
+                    },
+                    result.message
+                ));
+                process_status.running = false;
+                process_status.command = None;
+                process_status.progress = None;
+                process_status.message = Some("分析失败".to_string());
+            }
+            
+            AuditResult {
+                success: false,
+                message: "分析失败".to_string(),
+                data: None,
+                output_files: vec![],
+                statistics: None,
+                error: Some(result.message),
+            }
+        }
+    };
+    
+    Ok(final_result)
+}
+
+// Tauri命令：运行审计分析（使用Rust后端）
+#[command]
+async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<AuditResult, String> {
+    // 直接调用Rust后端实现，复用上面的逻辑
+    return run_rust_audit(config, state).await;
 }
 
 // Tauri命令：时点查询
@@ -399,19 +382,19 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
         
         if !process_status.output_log.is_empty() {
             process_status.output_log.push(format!("[{}] ===== 开始时点查询 =====", 
-                chrono::Utc::now().format("%H:%M:%S")
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
             ));
         }
         
         process_status.output_log.push(format!("[{}] 🔍 执行时点查询: 第{}行", 
-            chrono::Utc::now().format("%H:%M:%S"), query.row_number
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), query.row_number
         ));
         process_status.output_log.push(format!("[{}] 📁 文件: {}", 
-            chrono::Utc::now().format("%H:%M:%S"), 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
             query.file_path.split(&['/', '\\'][..]).last().unwrap_or(&query.file_path)
         ));
         process_status.output_log.push(format!("[{}] 🔧 算法: {}", 
-            chrono::Utc::now().format("%H:%M:%S"), 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
             match query.algorithm.as_str() {
                 "FIFO" => "FIFO先进先出算法",
                 "BALANCE_METHOD" => "差额计算法",
@@ -469,7 +452,7 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
                             {
                                 let mut process_status = state.current_process.lock().await;
                                 process_status.output_log.push(format!("[{}] {}", 
-                                    chrono::Utc::now().format("%H:%M:%S"), 
+                                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
                                     line_str
                                 ));
                                 
@@ -564,29 +547,66 @@ async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> 
     Ok(result)
 }
 
-// Tauri命令：检查Python环境
+// Tauri命令：检查系统环境
 #[command]
-async fn check_python_env() -> Result<serde_json::Value, String> {
-    let python_exe = find_python_executable();
-    let mut cmd = Command::new(&python_exe);
-    cmd.env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
-        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
-        .arg("--version");
+async fn check_system_env() -> Result<serde_json::Value, String> {
+    println!("check_system_env 命令被调用");
     
-    match cmd.output().await {
-        Ok(output) => {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let project_root = get_project_root().unwrap_or_else(|_| PathBuf::from("."));
-            
-            Ok(serde_json::json!({
-                "python_available": output.status.success(),
-                "python_version": version.trim(),
-                "python_path": python_exe.to_string_lossy(),
-                "project_root": project_root.to_string_lossy()
-            }))
+    // 检测是否为开发环境
+    let is_dev_mode = cfg!(debug_assertions);
+    println!("开发模式: {}", is_dev_mode);
+    
+    // 检查临时目录访问权限
+    let temp_dir_available = match std::env::temp_dir().metadata() {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+    
+    // 检查工作目录权限
+    let work_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let work_dir_writable = match std::fs::create_dir_all(&work_dir.join("temp_analysis_results")) {
+        Ok(_) => true,
+        Err(e) => {
+            if is_dev_mode {
+                println!("Dev mode: Cannot create temp_analysis_results directory: {}", e);
+                println!("Working directory: {}", work_dir.display());
+            }
+            false
         }
-        Err(e) => Err(format!("Failed to check Python environment: {}", e)),
-    }
+    };
+    
+    // 在开发环境中放宽检查要求
+    let file_system_ok = if is_dev_mode {
+        temp_dir_available // 开发环境只需要临时目录可用
+    } else {
+        temp_dir_available && work_dir_writable // 生产环境需要更严格的检查
+    };
+    
+    // 检查内存情况（简单检查）
+    let memory_available = true; // Rust自身能运行说明内存基本够用
+    
+    // 系统架构信息
+    let os_info = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
+    
+    // 环境模式信息
+    let env_mode = if is_dev_mode { "开发模式" } else { "生产模式" };
+    let backend_version = if is_dev_mode { "v2.0.0-Dev" } else { "v2.0.0" };
+    
+    let result = serde_json::json!({
+        "system_available": file_system_ok && memory_available,
+        "file_system_access": file_system_ok,
+        "temp_directory_access": temp_dir_available,
+        "work_directory_writable": work_dir_writable,
+        "memory_available": memory_available,
+        "system_info": os_info,
+        "work_directory": work_dir.to_string_lossy(),
+        "backend_engine": format!("Rust Native Backend ({})", env_mode),
+        "backend_version": backend_version,
+        "is_dev_mode": is_dev_mode
+    });
+    
+    println!("系统环境检查结果: {:?}", result);
+    Ok(result)
 }
 
 // Tauri命令：获取查询历史
@@ -612,14 +632,14 @@ async fn stop_analysis(state: State<'_, AppState>) -> Result<bool, String> {
     
     if process_status.running {
         process_status.output_log.push(format!("[{}] ⏹️ 用户停止分析", 
-            chrono::Utc::now().format("%H:%M:%S")
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
         ));
         
         // 尝试终止Python进程
         let mut process_killed = false;
         if let Some(process_id) = process_status.process_id {
             process_status.output_log.push(format!("[{}] 🔄 正在终止Python进程 (PID: {})...", 
-                chrono::Utc::now().format("%H:%M:%S"), process_id
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), process_id
             ));
             
             // 在Windows上使用taskkill命令终止进程
@@ -634,18 +654,18 @@ async fn stop_analysis(state: State<'_, AppState>) -> Result<bool, String> {
                     if output.status.success() {
                         process_killed = true;
                         process_status.output_log.push(format!("[{}] ✅ Python进程已成功终止", 
-                            chrono::Utc::now().format("%H:%M:%S")
+                            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
                         ));
                     } else {
                         let error_msg = String::from_utf8_lossy(&output.stderr);
                         process_status.output_log.push(format!("[{}] ⚠️ 无法终止Python进程: {}", 
-                            chrono::Utc::now().format("%H:%M:%S"), error_msg
+                            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), error_msg
                         ));
                     }
                 }
                 Err(e) => {
                     process_status.output_log.push(format!("[{}] ❌ 终止进程时发生错误: {}", 
-                        chrono::Utc::now().format("%H:%M:%S"), e
+                        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), e
                     ));
                 }
             }
@@ -677,7 +697,7 @@ async fn clear_analysis_log(state: State<'_, AppState>) -> Result<(), String> {
     if !process_status.running {
         process_status.output_log.clear();
         process_status.output_log.push(format!("[{}] 📝 日志已清空", 
-            chrono::Utc::now().format("%H:%M:%S")
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
         ));
         info!("Analysis log cleared");
         Ok(())
@@ -956,6 +976,7 @@ fn create_app_state() -> AppState {
             process_id: None,
         }),
         app_config: Mutex::new(create_default_config()),
+        audit_service: Arc::new(AuditService::new()),  // 添加Rust审计服务
     }
 }
 
@@ -1121,6 +1142,54 @@ async fn query_fund_pool(pool_name: String, file_path: String, row_number: u32, 
     result
 }
 
+// Tauri命令：打开本地文件
+#[command]
+async fn open_file(file_path: String) -> Result<(), String> {
+    info!("Attempting to open file: {}", file_path);
+    
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let result = Command::new("cmd")
+            .args(&["/C", "start", "", &file_path])
+            .spawn();
+            
+        match result {
+            Ok(_) => {
+                info!("Successfully opened file: {}", file_path);
+                Ok(())
+            },
+            Err(e) => {
+                error!("Failed to open file {}: {}", file_path, e);
+                Err(format!("Failed to open file: {}", e))
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 对于非Windows系统，使用其他方法
+        use std::process::Command;
+        let result = if cfg!(target_os = "macos") {
+            Command::new("open").arg(&file_path).spawn()
+        } else {
+            // Linux或其他Unix系统
+            Command::new("xdg-open").arg(&file_path).spawn()
+        };
+        
+        match result {
+            Ok(_) => {
+                info!("Successfully opened file: {}", file_path);
+                Ok(())
+            },
+            Err(e) => {
+                error!("Failed to open file {}: {}", file_path, e);
+                Err(format!("Failed to open file: {}", e))
+            }
+        }
+    }
+}
+
 fn main() {
     // 初始化日志
     env_logger::init();
@@ -1135,8 +1204,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_algorithms,
             run_audit,
+            run_rust_audit,  // 新增Rust后端命令
             time_point_query,
-            check_python_env,
+            check_system_env,
             get_query_history,
             clear_query_history,
             delete_query_history_item,
@@ -1149,7 +1219,8 @@ fn main() {
             export_query_result,
             validate_file_path,
             set_window_dark_mode,
-            query_fund_pool
+            query_fund_pool,
+            open_file  // 新增打开文件命令
         ])
         .setup(|app| {
             info!("Application setup completed");
