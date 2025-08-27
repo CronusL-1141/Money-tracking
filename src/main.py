@@ -182,7 +182,7 @@ def compare_algorithms(input_file: str) -> None:
 def interactive_mode():
     """交互模式 - 用户选择算法"""
     print("\n" + "="*60)
-    print("🏦 FIFO资金追踪审计系统 v2.0")
+    print("FIFO资金追踪审计系统 v2.0")
     print("="*60)
     
     # 显示算法选项
