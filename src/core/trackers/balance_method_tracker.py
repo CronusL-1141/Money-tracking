@@ -248,17 +248,25 @@ class BalanceMethodTracker(ITracker):
             总个人占比 = 0
             总公司占比 = 0
         
+        # 计算累计净盈亏（与Rust版本一致）
+        净盈亏 = 产品信息['累计赎回'] - 产品信息['累计申购']
+        
+        # 统一使用与FIFO算法相同的字段名称，与Rust版本一致
+        资金占比 = f"个人{总个人占比:.1%}，公司{总公司占比:.1%}" if 产品信息['总金额'] > 0 else "无资金"
+        
         交易记录 = {
             '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 金额,
             '出金': 0,
             '总余额': 产品信息['总金额'],
-            '单笔资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
-            '总资金占比': f"个人{总个人占比:.1%}，公司{总公司占比:.1%}",
+            '个人余额': 产品信息.get('累计个人金额', 0),  # 添加缺失字段
+            '公司余额': 产品信息.get('累计公司金额', 0),  # 添加缺失字段
+            '资金占比': 资金占比,
             '行为性质': f"入金（个人{金额*个人占比:,.0f}，公司{金额*公司占比:,.0f}）",
             '累计申购': 产品信息['累计申购'],
-            '累计赎回': 产品信息['累计赎回']
+            '累计赎回': 产品信息['累计赎回'],
+            '净盈亏': 净盈亏  # 第12列：累计净盈亏
         }
         self._场外资金池记录.append(交易记录)
     
@@ -330,17 +338,25 @@ class BalanceMethodTracker(ITracker):
             总个人占比 = 0
             总公司占比 = 0
         
+        # 计算累计净盈亏（与Rust版本一致）
+        净盈亏 = 产品信息['累计赎回'] - 产品信息['累计申购']
+        
+        # 统一使用与FIFO算法相同的字段名称，与Rust版本一致
+        资金占比 = f"个人{总个人占比:.1%}，公司{总公司占比:.1%}" if 产品信息['总金额'] > 0 else "资金池清空"
+        
         交易记录 = {
             '交易时间': 交易日期.strftime('%Y-%m-%d %H:%M:%S') if 交易日期 is not None else '未知时间',
             '资金池名称': 投资产品编号,
             '入金': 0,
             '出金': 金额,
             '总余额': 产品信息['总金额'],
-            '单笔资金占比': f"个人{个人占比:.1%}，公司{公司占比:.1%}",
-            '总资金占比': f"个人{总个人占比:.1%}，公司{总公司占比:.1%}",
+            '个人余额': 产品信息.get('累计个人金额', 0),  # 添加缺失字段
+            '公司余额': 产品信息.get('累计公司金额', 0),  # 添加缺失字段
+            '资金占比': 资金占比,
             '行为性质': f"出金（个人{个人返还:,.0f}，公司{公司返还:,.0f}，收益{收益:,.0f}）",
             '累计申购': 产品信息['累计申购'],
-            '累计赎回': 产品信息['累计赎回']
+            '累计赎回': 产品信息['累计赎回'],
+            '净盈亏': 净盈亏  # 第12列：累计净盈亏
         }
         self._场外资金池记录.append(交易记录)
         
@@ -409,38 +425,16 @@ class BalanceMethodTracker(ITracker):
                         final_personal_balance = final_total_balance * 0.5  # 默认值，如果解析失败
                         final_company_balance = final_total_balance * 0.5
                         
-                        # 计算真实盈亏（考虑资金池重置历史）
-                        if pool_name in self._投资产品资金池:
-                            pool_info = self._投资产品资金池[pool_name]
-                            historical_profit = pool_info.get('累计已实现盈利', 0)
-                            
-                            # 当前周期盈亏
-                            if final_total_balance < 0:
-                                current_profit = abs(final_total_balance)
-                                current_status = "盈利"
-                            elif final_total_balance > 0:
-                                current_profit = -final_total_balance  # 负数表示亏损
-                                current_status = "亏损"
-                            else:
-                                current_profit = 0
-                                current_status = "持平"
-                            
-                            # 真实总盈亏
-                            total_real_profit = historical_profit + current_profit
-                            
-                            if total_real_profit > 0:
-                                profit_status = "盈利"
-                            elif total_real_profit < 0:
-                                profit_status = "亏损"
-                            else:
-                                profit_status = "持平"
-                            
-                            profit_loss = total_real_profit
+                        # 采用简单可靠的统计计算方法（与Rust版本一致）
+                        # 直接使用累计申购赎回数据计算净盈亏
+                        profit_loss = total_redemption - total_purchase
+                        
+                        if profit_loss > 0:
+                            profit_status = "盈利"
+                        elif profit_loss < 0:
+                            profit_status = "亏损"
                         else:
-                            # fallback to old logic
-                            net_amount = total_purchase - total_redemption
-                            profit_loss = final_total_balance - net_amount if net_amount != 0 else 0
-                            profit_status = "盈利" if profit_loss > 0 else "亏损" if profit_loss < 0 else "持平"
+                            profit_status = "持平"
                         
                         summary_row = pd.Series({
                             '交易时间': '── 总计 ──',
