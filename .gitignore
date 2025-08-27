@@ -42,6 +42,14 @@ tauri-app/src-tauri/target/
 tauri-app/dist/
 tauri-app/build/
 
+# 测试和开发目录
+independent_tests/
+**/target/
+
+# npm临时缓存
+tempnpm-cache/
+**/tempnpm-cache/
+
 # IDE相关
 .vscode/
 .idea/
