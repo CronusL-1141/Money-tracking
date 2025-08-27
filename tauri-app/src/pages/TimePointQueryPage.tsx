@@ -83,8 +83,11 @@ const TimePointQueryPage: React.FC = () => {
             
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
+              // 只在不是重复选择时添加日志
+              if (queryState.filePath !== filePath) {
+                appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+              }
               updateQueryState({ filePath });
-              appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
               showNotification({
                 type: 'success',
                 title: t('notifications.success.file_drag_success'),
@@ -138,8 +141,11 @@ const TimePointQueryPage: React.FC = () => {
 
       if (selected && typeof selected === 'string') {
         const fileName = selected.split(/[/\\]/).pop() || '';
+        // 只在不是重复选择时添加日志
+        if (queryState.filePath !== selected) {
+          appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+        }
         updateQueryState({ filePath: selected });
-        appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
         showNotification({
           type: 'success',
           title: t('notifications.success.file_selection'),
@@ -431,7 +437,13 @@ const TimePointQueryPage: React.FC = () => {
                     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                   }
                 }}
-                onClick={handleSelectFile}
+                // onClick={(e) => {
+                //   // 检查点击目标是否为按钮或按钮内部元素
+                //   const isButtonClick = (e.target as Element).closest('button') !== null;
+                //   if (!isButtonClick) {
+                //     handleSelectFile();
+                //   }
+                // }}
                 elevation={isDragOver ? 3 : 1}
               >
                 <Box>
@@ -577,15 +589,15 @@ const TimePointQueryPage: React.FC = () => {
                         </TableRow>
                         <TableRow>
                           <TableCell>{t('table.headers.income_amount')}</TableCell>
-                          <TableCell>¥{queryResult.target_row_data?.income_amount?.toLocaleString() || '0'}</TableCell>
+                          <TableCell>¥{parseFloat(queryResult.target_row_data?.income_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>{t('table.headers.expense_amount')}</TableCell>
-                          <TableCell>¥{queryResult.target_row_data?.expense_amount?.toLocaleString() || '0'}</TableCell>
+                          <TableCell>¥{parseFloat(queryResult.target_row_data?.expense_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>{t('table.headers.balance')}</TableCell>
-                          <TableCell>¥{queryResult.target_row_data?.balance?.toLocaleString() || '0'}</TableCell>
+                          <TableCell>¥{parseFloat(queryResult.target_row_data?.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>{t('table.headers.fund_attr')}</TableCell>
@@ -612,26 +624,26 @@ const TimePointQueryPage: React.FC = () => {
                         {queryResult.tracker_state?.personal_balance !== undefined && (
                           <TableRow>
                             <TableCell>{t('table.headers.personal_balance')}</TableCell>
-                            <TableCell>¥{queryResult.tracker_state.personal_balance.toLocaleString()}</TableCell>
+                            <TableCell>¥{parseFloat(queryResult.tracker_state.personal_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.company_balance !== undefined && (
                           <TableRow>
                             <TableCell>{t('table.headers.company_balance')}</TableCell>
-                            <TableCell>¥{queryResult.tracker_state.company_balance.toLocaleString()}</TableCell>
+                            <TableCell>¥{parseFloat(queryResult.tracker_state.company_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.total_misappropriation !== undefined && (
                           <TableRow>
                             <TableCell>{t('table.headers.cumulative_misappropriation')}</TableCell>
-                            <TableCell>¥{queryResult.tracker_state.total_misappropriation.toLocaleString()}</TableCell>
+                            <TableCell>¥{parseFloat(queryResult.tracker_state.total_misappropriation).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.funding_gap !== undefined && (
                           <TableRow>
                             <TableCell>{t('table.headers.funding_gap')}</TableCell>
                             <TableCell style={{color: queryResult.tracker_state.funding_gap >= 0 ? theme.palette.error.main : theme.palette.success.main}}>
-                              ¥{queryResult.tracker_state.funding_gap.toLocaleString()}
+                              ¥{parseFloat(queryResult.tracker_state.funding_gap).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </TableCell>
                           </TableRow>
                         )}
@@ -652,10 +664,6 @@ const TimePointQueryPage: React.FC = () => {
                         <TableRow>
                           <TableCell>{t('table.headers.processed_rows')}</TableCell>
                           <TableCell>{queryResult.processing_stats?.last_processed_row}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>{t('table.headers.processing_steps')}</TableCell>
-                          <TableCell>{queryResult.processing_stats?.total_steps}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>{t('table.headers.error_count')}</TableCell>
@@ -695,7 +703,7 @@ const TimePointQueryPage: React.FC = () => {
                     >
                       {queryResult.available_fund_pools.map((pool: FundPool) => (
                         <MenuItem key={pool.name} value={pool.name}>
-                          {pool.name} (¥{pool.total_amount.toLocaleString()})
+                          {pool.name} (¥{parseFloat(pool.total_amount).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})})
                         </MenuItem>
                       ))}
                     </Select>
@@ -741,17 +749,17 @@ const TimePointQueryPage: React.FC = () => {
                               <TableCell>{record.交易时间}</TableCell>
                               <TableCell>
                                 {typeof record.入金 === 'number' 
-                                  ? `¥${record.入金.toLocaleString()}` 
+                                  ? `¥${parseFloat(record.入金).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
                                   : record.入金}
                               </TableCell>
                               <TableCell>
                                 {typeof record.出金 === 'number' 
-                                  ? `¥${record.出金.toLocaleString()}` 
+                                  ? `¥${parseFloat(record.出金).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
                                   : record.出金}
                               </TableCell>
                               <TableCell>
                                 {typeof record.总余额 === 'number' 
-                                  ? `¥${record.总余额.toLocaleString()}` 
+                                  ? `¥${parseFloat(record.总余额).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
                                   : record.总余额}
                               </TableCell>
                               <TableCell>{record.单笔资金占比}</TableCell>

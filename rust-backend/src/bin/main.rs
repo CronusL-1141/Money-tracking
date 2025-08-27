@@ -178,7 +178,7 @@ async fn run_single_analysis(
     let result = service.analyze_financial_data(algorithm, input_file, output_file).await;
     
     match result {
-        Ok((summary, transactions)) => {
+        Ok((summary, transactions, _output_files)) => {
             if !quiet {
                 println!("✅ {}算法分析完成！", algorithm);
                 println!("📊 处理行数: {}", transactions.len());
@@ -220,7 +220,7 @@ async fn compare_algorithms(input_file: &str) -> Result<(), Box<dyn std::error::
         let service = AuditService::new().with_suppress_output(true);
         
         match service.analyze_financial_data(algorithm, input_file, None::<&str>).await {
-            Ok((summary, transactions)) => {
+            Ok((summary, transactions, _output_files)) => {
                 results.insert(algorithm, (summary, transactions.len()));
                 println!("✅ {} 算法完成", algorithm);
             }

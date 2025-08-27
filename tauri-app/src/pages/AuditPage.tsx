@@ -88,8 +88,11 @@ const AuditPage: React.FC = () => {
               // 记录文件选择信息
               lastFileSelection.current = {filePath: filePath, fileName: fileName, timestamp: now};
               
+              // 只在不是重复选择时添加日志
+              if (auditState.inputFile !== filePath) {
+                appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+              }
               updateAuditState({ inputFile: filePath });
-              appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
               showNotification({
                 type: 'success',
                 title: t('notifications.success.file_drag_success'),
@@ -144,8 +147,11 @@ const AuditPage: React.FC = () => {
         // 记录文件选择信息
         lastFileSelection.current = {filePath: selected, fileName: fileName, timestamp: now};
         
+        // 只在不是重复选择时添加日志
+        if (auditState.inputFile !== selected) {
+          appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+        }
         updateAuditState({ inputFile: selected });
-        appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
         showNotification({
           type: 'success',
           title: t('notifications.success.file_selection'),
@@ -479,7 +485,13 @@ const AuditPage: React.FC = () => {
                     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                   }
                 }}
-                onClick={handleSelectFile}
+                // onClick={(e) => {
+                //   // 检查点击目标是否为按钮或按钮内部元素
+                //   const isButtonClick = (e.target as Element).closest('button') !== null;
+                //   if (!isButtonClick) {
+                //     handleSelectFile();
+                //   }
+                // }}
                 elevation={isDragOver ? 3 : 1}
               >
                 <Box>

@@ -17,7 +17,10 @@ use regex::Regex;
 use std::sync::Arc;
 
 // 引入Rust后端库
-use audit_backend::{AuditService, TauriAuditConfig};
+use audit_backend::{AuditService, TauriAuditConfig, TimePointService, TimePointQueryRequest, TimePointQueryResult, FundPoolQueryRequest, FundPoolQueryResult};
+
+// 引入模块化命令
+mod commands;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::{
@@ -352,9 +355,9 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     return run_rust_audit(config, state).await;
 }
 
-// Tauri命令：时点查询
+// Tauri命令：时点查询（旧Python版本，保留作为备用）
 #[command]
-async fn time_point_query(query: TimePointQuery, state: State<'_, AppState>) -> Result<QueryResult, String> {
+async fn time_point_query_python(query: TimePointQuery, state: State<'_, AppState>) -> Result<QueryResult, String> {
     info!("Time point query: file={}, row={}, algorithm={}", query.file_path, query.row_number, query.algorithm);
     
     let python_exe = find_python_executable();
@@ -1090,57 +1093,7 @@ fn extract_message_from_line(line: &str) -> String {
     }
 }
 
-// Tauri命令：资金池查询
-#[command]
-async fn query_fund_pool(pool_name: String, file_path: String, row_number: u32, algorithm: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    info!("Fund pool query: pool={}, file={}, row={}, algorithm={}", pool_name, file_path, row_number, algorithm);
-    
-    let python_exe = find_python_executable();
-    let project_root = get_project_root()?;
-    let script_path = project_root.join("src").join("services").join("fund_pool_cli.py");
-    
-    let mut cmd = Command::new(&python_exe);
-    cmd.current_dir(&project_root)
-        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
-        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
-        .arg("-u")  // 无缓冲模式，立即输出
-        .arg(script_path)
-        .arg("--file")
-        .arg(&file_path)
-        .arg("--row")
-        .arg(&row_number.to_string())
-        .arg("--algorithm")
-        .arg(&algorithm)
-        .arg("--pool")
-        .arg(&pool_name)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    
-    let result = match cmd.spawn() {
-        Ok(mut child) => {
-            // 获取输出
-            match child.wait_with_output().await {
-                Ok(output) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    
-                    if output.status.success() {
-                        match serde_json::from_str::<serde_json::Value>(&stdout) {
-                            Ok(json_data) => Ok(json_data),
-                            Err(e) => Err(format!("Failed to parse JSON output: {}", e))
-                        }
-                    } else {
-                        Err(format!("Fund pool query failed: {}", stderr))
-                    }
-                },
-                Err(e) => Err(format!("Failed to execute fund pool query: {}", e))
-            }
-        },
-        Err(e) => Err(format!("Failed to spawn fund pool query process: {}", e))
-    };
-    
-    result
-}
+// 已迁移到 commands::query_fund_pool
 
 // Tauri命令：打开本地文件
 #[command]
@@ -1205,7 +1158,7 @@ fn main() {
             get_algorithms,
             run_audit,
             run_rust_audit,  // 新增Rust后端命令
-            time_point_query,
+            commands::time_point_query_rust,
             check_system_env,
             get_query_history,
             clear_query_history,
@@ -1219,7 +1172,7 @@ fn main() {
             export_query_result,
             validate_file_path,
             set_window_dark_mode,
-            query_fund_pool,
+            commands::query_fund_pool,
             open_file  // 新增打开文件命令
         ])
         .setup(|app| {

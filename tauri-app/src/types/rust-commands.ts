@@ -138,7 +138,7 @@ export class RustCommands {
    * 时点查询
    */
   static async timePointQuery(query: TimePointQuery): Promise<QueryResult> {
-    return invoke<QueryResult>('time_point_query', { query });
+    return invoke<QueryResult>('time_point_query_rust', { query });
   }
 
   /**
