@@ -293,7 +293,7 @@ impl OffsitePoolRecordManager {
         let mut final_balance = Decimal::ZERO;
         let mut final_personal_balance = Decimal::ZERO;
         let mut final_company_balance = Decimal::ZERO;
-        let mut cumulative_profit_loss = Decimal::ZERO;
+        let cumulative_profit_loss = Decimal::ZERO;
         let mut cumulative_personal_profit_loss = Decimal::ZERO;
         let mut cumulative_company_profit_loss = Decimal::ZERO;
         

@@ -28,9 +28,14 @@ interface AppStateContextType {
   // 应用初始化状态
   isInitialized: boolean;
   
+  // 全局文件状态
+  globalSelectedFile: string;
+  updateGlobalSelectedFile: (filePath: string) => void;
+  
   // 审计页面状态管理
   auditState: AuditPageState;
   updateAuditState: (updates: Partial<AuditPageState>) => void;
+  updateAuditStateSync: (updates: Partial<AuditPageState>) => void; // 静默同步，不触发其他页面更新
   resetAuditState: () => void;
   appendAuditLog: (message: string) => void;
   clearAuditLog: () => void;
@@ -38,6 +43,7 @@ interface AppStateContextType {
   // 时点查询页面状态管理
   queryState: TimePointQueryPageState;
   updateQueryState: (updates: Partial<TimePointQueryPageState>) => void;
+  updateQueryStateSync: (updates: Partial<TimePointQueryPageState>) => void; // 静默同步，不触发其他页面更新
   resetQueryState: () => void;
   addQueryHistory: (item: any) => void;
   clearQueryHistory: () => void;
@@ -86,14 +92,40 @@ export const AppStateProvider: React.FC<AppStateProviderProps> = ({ children }) 
   const [auditState, setAuditState] = useState<AuditPageState>(defaultAuditState);
   const [queryState, setQueryState] = useState<TimePointQueryPageState>(defaultQueryState);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [globalSelectedFile, setGlobalSelectedFile] = useState<string>('');
 
-  // 审计状态管理方法
+  // 全局文件状态管理方法
+  const updateGlobalSelectedFile = useCallback((filePath: string) => {
+    setGlobalSelectedFile(filePath);
+    // 静默同步更新两个页面的文件状态（不触发额外的日志）
+    setAuditState(prev => ({ ...prev, inputFile: filePath }));
+    setQueryState(prev => ({ ...prev, filePath: filePath }));
+  }, []);
+
+  // 审计状态管理方法 - 静默同步版本（不触发其他页面更新）
+  const updateAuditStateSync = useCallback((updates: Partial<AuditPageState>) => {
+    setAuditState(prev => ({ ...prev, ...updates }));
+    // 静默同步，只更新全局状态，不更新其他页面
+    if (updates.inputFile !== undefined) {
+      setGlobalSelectedFile(updates.inputFile);
+    }
+  }, []);
+
+  // 审计状态管理方法 - 正常版本（会触发跨页面同步）
   const updateAuditState = useCallback((updates: Partial<AuditPageState>) => {
     setAuditState(prev => ({ ...prev, ...updates }));
+    // 如果更新包含文件路径，同步更新全局状态和其他页面
+    if (updates.inputFile !== undefined) {
+      setGlobalSelectedFile(updates.inputFile);
+      setQueryState(prev => ({ ...prev, filePath: updates.inputFile! }));
+    }
   }, []);
 
   const resetAuditState = useCallback(() => {
-    setAuditState(defaultAuditState);
+    setAuditState(prev => ({
+      ...defaultAuditState,
+      inputFile: prev.inputFile // 保留已选择的文件
+    }));
   }, []);
 
   const appendAuditLog = useCallback((message: string) => {
@@ -110,13 +142,30 @@ export const AppStateProvider: React.FC<AppStateProviderProps> = ({ children }) 
     }));
   }, []);
 
-  // 查询状态管理方法
+  // 查询状态管理方法 - 静默同步版本（不触发其他页面更新）
+  const updateQueryStateSync = useCallback((updates: Partial<TimePointQueryPageState>) => {
+    setQueryState(prev => ({ ...prev, ...updates }));
+    // 静默同步，只更新全局状态，不更新其他页面
+    if (updates.filePath !== undefined) {
+      setGlobalSelectedFile(updates.filePath);
+    }
+  }, []);
+
+  // 查询状态管理方法 - 正常版本（会触发跨页面同步）
   const updateQueryState = useCallback((updates: Partial<TimePointQueryPageState>) => {
     setQueryState(prev => ({ ...prev, ...updates }));
+    // 如果更新包含文件路径，同步更新全局状态和其他页面
+    if (updates.filePath !== undefined) {
+      setGlobalSelectedFile(updates.filePath);
+      setAuditState(prev => ({ ...prev, inputFile: updates.filePath! }));
+    }
   }, []);
 
   const resetQueryState = useCallback(() => {
-    setQueryState(defaultQueryState);
+    setQueryState(prev => ({
+      ...defaultQueryState,
+      filePath: prev.filePath // 保留已选择的文件
+    }));
   }, []);
 
   const addQueryHistory = useCallback((item: any, showNotification?: (notification: any) => void) => {
@@ -199,13 +248,17 @@ export const AppStateProvider: React.FC<AppStateProviderProps> = ({ children }) 
 
   const value: AppStateContextType = {
     isInitialized,
+    globalSelectedFile,
+    updateGlobalSelectedFile,
     auditState,
     updateAuditState,
+    updateAuditStateSync,
     resetAuditState,
     appendAuditLog,
     clearAuditLog,
     queryState,
     updateQueryState,
+    updateQueryStateSync,
     resetQueryState,
     addQueryHistory,
     clearQueryHistory,

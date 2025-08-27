@@ -10,6 +10,7 @@ import {
   AppConfig,
   FileInfo
 } from '../types/rust-commands';
+import { AnalysisHistoryManager } from '../utils/analysisHistoryManager';
 
 /**
  * 系统环境状态接口
@@ -185,6 +186,45 @@ export class SystemService {
     } catch (error) {
       console.error('Failed to validate file path:', error);
       throw new Error(`无法验证文件路径: ${error}`);
+    }
+  }
+
+  /**
+   * 初始化系统服务 - 应用启动时调用
+   */
+  static async initialize(): Promise<{
+    environmentStatus: SystemEnvStatus;
+    fileSyncResult?: {
+      totalChecked: number;
+      totalUpdated: number;
+      errors: string[];
+    };
+  }> {
+    console.log('初始化系统服务...');
+    
+    try {
+      // 检查系统环境
+      const environmentStatus = await this.checkEnvironment();
+      console.log('系统环境检查完成:', environmentStatus);
+      
+      let fileSyncResult;
+      
+      // 如果文件系统可访问，同步分析历史记录的文件状态
+      if (environmentStatus.file_system_access) {
+        console.log('开始同步分析历史记录文件状态...');
+        fileSyncResult = await AnalysisHistoryManager.syncAllRecordsFileStatus();
+        console.log('文件状态同步完成:', fileSyncResult);
+      } else {
+        console.warn('文件系统不可访问，跳过文件状态同步');
+      }
+      
+      return {
+        environmentStatus,
+        fileSyncResult
+      };
+    } catch (error) {
+      console.error('系统服务初始化失败:', error);
+      throw new Error(`系统初始化失败: ${error}`);
     }
   }
 }

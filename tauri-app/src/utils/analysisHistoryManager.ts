@@ -89,48 +89,109 @@ export class AnalysisHistoryManager {
   /**
    * 删除分析记录
    */
-  static async deleteRecord(recordId: string): Promise<boolean> {
+  static async deleteRecord(recordId: string): Promise<{
+    success: boolean;
+    allDeleted: boolean;
+    errors: string[];
+    partiallyDeleted: boolean;
+  }> {
     try {
       const history = this.getHistory();
       const recordIndex = history.records.findIndex(r => r.id === recordId);
       
       if (recordIndex === -1) {
-        return false;
+        return { success: false, allDeleted: false, errors: ['记录不存在'], partiallyDeleted: false };
       }
       
       const record = history.records[recordIndex];
+      const result = await this.deleteRecordFiles(record);
       
-      // 删除文件
-      await this.deleteRecordFile(record);
-      
-      // 从历史记录中移除
-      history.records.splice(recordIndex, 1);
-      this.saveHistory(history);
-      
-      return true;
+      if (result.allDeleted) {
+        // 所有文件都删除成功，移除记录
+        history.records.splice(recordIndex, 1);
+        this.saveHistory(history);
+        return { success: true, allDeleted: true, errors: [], partiallyDeleted: false };
+      } else if (result.partiallyDeleted) {
+        // 部分文件删除成功，更新记录状态但保留记录
+        history.records[recordIndex] = result.updatedRecord;
+        this.saveHistory(history);
+        return { success: true, allDeleted: false, errors: result.errors, partiallyDeleted: true };
+      } else {
+        // 所有文件删除失败，保留记录不变
+        return { success: false, allDeleted: false, errors: result.errors, partiallyDeleted: false };
+      }
     } catch (error) {
       console.error('Failed to delete analysis record:', error);
-      return false;
+      return { success: false, allDeleted: false, errors: [error instanceof Error ? error.message : '未知错误'], partiallyDeleted: false };
     }
   }
 
   /**
-   * 删除记录对应的文件
+   * 删除记录对应的文件，返回详细结果
    */
-  private static async deleteRecordFile(record: AnalysisHistoryRecord): Promise<void> {
+  private static async deleteRecordFiles(record: AnalysisHistoryRecord): Promise<{
+    allDeleted: boolean;
+    partiallyDeleted: boolean;
+    errors: string[];
+    updatedRecord: AnalysisHistoryRecord;
+  }> {
+    const errors: string[] = [];
+    let mainFileDeleted = false;
+    let poolFileDeleted = false;
+    
+    // 创建更新后的记录副本
+    const updatedRecord: AnalysisHistoryRecord = JSON.parse(JSON.stringify(record));
+    
+    // 尝试删除主输出文件
     try {
-      // 删除主输出文件
       if (await exists(record.outputFile.path)) {
         await removeFile(record.outputFile.path);
-      }
-      
-      // 删除场外资金池记录文件（如果存在）
-      if (record.offsitePoolFile && await exists(record.offsitePoolFile.path)) {
-        await removeFile(record.offsitePoolFile.path);
+        mainFileDeleted = true;
+        updatedRecord.outputFile.deleted = true;
+        delete updatedRecord.outputFile.deleteError;
+      } else {
+        // 文件不存在，认为已删除
+        mainFileDeleted = true;
+        updatedRecord.outputFile.deleted = true;
       }
     } catch (error) {
-      console.warn(`Failed to delete files for record ${record.id}:`, error);
+      const errorMsg = error instanceof Error ? error.message : '未知错误';
+      errors.push(`主分析结果删除失败: ${errorMsg}`);
+      updatedRecord.outputFile.deleteError = errorMsg;
     }
+    
+    // 尝试删除场外资金池记录文件（如果存在）
+    if (record.offsitePoolFile) {
+      try {
+        if (await exists(record.offsitePoolFile.path)) {
+          await removeFile(record.offsitePoolFile.path);
+          poolFileDeleted = true;
+          updatedRecord.offsitePoolFile!.deleted = true;
+          delete updatedRecord.offsitePoolFile!.deleteError;
+        } else {
+          // 文件不存在，认为已删除
+          poolFileDeleted = true;
+          updatedRecord.offsitePoolFile!.deleted = true;
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : '未知错误';
+        errors.push(`场外资金池记录删除失败: ${errorMsg}`);
+        updatedRecord.offsitePoolFile!.deleteError = errorMsg;
+      }
+    } else {
+      // 没有场外文件，认为该部分已完成
+      poolFileDeleted = true;
+    }
+    
+    const allDeleted = mainFileDeleted && poolFileDeleted;
+    const partiallyDeleted = mainFileDeleted || poolFileDeleted;
+    
+    return {
+      allDeleted,
+      partiallyDeleted,
+      errors,
+      updatedRecord
+    };
   }
 
   /**
@@ -276,5 +337,134 @@ export class AnalysisHistoryManager {
       const seconds = ((milliseconds % 60000) / 1000).toFixed(0);
       return `${minutes}m ${seconds}s`;
     }
+  }
+
+  /**
+   * 检查单个记录的文件状态并更新
+   */
+  static async updateRecordFileStatus(record: AnalysisHistoryRecord): Promise<{
+    updated: boolean;
+    record: AnalysisHistoryRecord;
+  }> {
+    let updated = false;
+    const updatedRecord = JSON.parse(JSON.stringify(record));
+
+    // 检查主输出文件状态
+    try {
+      const mainFileExists = await exists(record.outputFile.path);
+      const currentMainDeleted = record.outputFile.deleted || false;
+      
+      if (!mainFileExists && !currentMainDeleted) {
+        updatedRecord.outputFile.deleted = true;
+        updatedRecord.outputFile.deleteError = '文件已被外部删除';
+        updated = true;
+      } else if (mainFileExists && currentMainDeleted) {
+        // 文件重新出现了，清除删除状态
+        delete updatedRecord.outputFile.deleted;
+        delete updatedRecord.outputFile.deleteError;
+        updated = true;
+      }
+    } catch (error) {
+      console.warn('检查主输出文件状态时出错:', error);
+    }
+
+    // 检查场外资金池文件状态
+    if (record.offsitePoolFile) {
+      try {
+        const poolFileExists = await exists(record.offsitePoolFile.path);
+        const currentPoolDeleted = record.offsitePoolFile.deleted || false;
+        
+        if (!poolFileExists && !currentPoolDeleted) {
+          updatedRecord.offsitePoolFile!.deleted = true;
+          updatedRecord.offsitePoolFile!.deleteError = '文件已被外部删除';
+          updated = true;
+        } else if (poolFileExists && currentPoolDeleted) {
+          // 文件重新出现了，清除删除状态
+          delete updatedRecord.offsitePoolFile!.deleted;
+          delete updatedRecord.offsitePoolFile!.deleteError;
+          updated = true;
+        }
+      } catch (error) {
+        console.warn('检查场外资金池文件状态时出错:', error);
+      }
+    }
+
+    return { updated, record: updatedRecord };
+  }
+
+  /**
+   * 批量更新所有记录的文件状态
+   */
+  static async syncAllRecordsFileStatus(): Promise<{
+    totalChecked: number;
+    totalUpdated: number;
+    errors: string[];
+  }> {
+    const history = this.getHistory();
+    const errors: string[] = [];
+    let totalUpdated = 0;
+    let updated = false;
+
+    console.log(`开始同步 ${history.records.length} 条历史记录的文件状态...`);
+
+    for (let i = 0; i < history.records.length; i++) {
+      try {
+        const result = await this.updateRecordFileStatus(history.records[i]);
+        if (result.updated) {
+          history.records[i] = result.record;
+          totalUpdated++;
+          updated = true;
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : '未知错误';
+        errors.push(`记录 ${history.records[i].id} 状态更新失败: ${errorMsg}`);
+      }
+    }
+
+    // 如果有更新，保存历史记录
+    if (updated) {
+      this.saveHistory(history);
+      console.log(`文件状态同步完成，更新了 ${totalUpdated} 条记录`);
+    }
+
+    return {
+      totalChecked: history.records.length,
+      totalUpdated,
+      errors
+    };
+  }
+
+  /**
+   * 获取包含实时文件状态的历史记录
+   */
+  static async getHistoryWithRealTimeStatus(): Promise<AnalysisHistoryStorage> {
+    const history = this.getHistory();
+    let hasUpdates = false;
+
+    // 并发检查所有记录的文件状态
+    const updatePromises = history.records.map(async (record, index) => {
+      const result = await this.updateRecordFileStatus(record);
+      if (result.updated) {
+        hasUpdates = true;
+        return { index, record: result.record };
+      }
+      return null;
+    });
+
+    const updates = await Promise.all(updatePromises);
+
+    // 应用更新
+    updates.forEach(update => {
+      if (update) {
+        history.records[update.index] = update.record;
+      }
+    });
+
+    // 如果有更新，保存到本地存储
+    if (hasUpdates) {
+      this.saveHistory(history);
+    }
+
+    return history;
   }
 }

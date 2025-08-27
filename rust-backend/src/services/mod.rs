@@ -14,7 +14,6 @@ use crate::errors::{AuditError, AuditResult};
 use std::time::Instant;
 use log::{info, debug, error};
 use rust_decimal::Decimal;
-use serde::{Serialize, Deserialize};
 
 // 时点查询请求结构
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -274,7 +273,7 @@ impl TimePointService {
     /// 使用FIFO算法处理到指定行
     fn process_with_fifo(&self, transactions: Vec<Transaction>, target_row: usize) -> AuditResult<(TrackerStateSnapshot, FrontendTransaction, Vec<TransactionStep>)> {
         let config = Config::new();
-        let mut tracker = FifoTracker::new(config);
+        let tracker = FifoTracker::new(config);
         let mut recent_steps = Vec::new();
         
         // 处理交易直到目标行（简化版本，不实际处理算法逻辑）
@@ -387,7 +386,7 @@ impl TimePointService {
     /// 使用差额计算法处理到指定行
     fn process_with_balance_method(&self, transactions: Vec<Transaction>, target_row: usize) -> AuditResult<(TrackerStateSnapshot, FrontendTransaction, Vec<TransactionStep>)> {
         let config = Config::new();
-        let mut tracker = BalanceMethodTracker::new(config);
+        let tracker = BalanceMethodTracker::new(config);
         let mut recent_steps = Vec::new();
         
         // 处理交易直到目标行（简化版本，不实际处理算法逻辑）

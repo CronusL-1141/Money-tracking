@@ -14,7 +14,7 @@ import AppStateProvider from "./contexts/AppStateContext";
 // import TestPage from "./pages/TestPage";
 
 // 服务和类型导入
-import { checkSystemEnvironment, SystemEnvStatus } from "./services/systemService";
+import { SystemService, SystemEnvStatus } from "./services/systemService";
 
 const App: React.FC = () => {
   const { t } = useTranslation();
@@ -30,11 +30,22 @@ const App: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // 检查系统环境
-        const status = await checkSystemEnvironment();
-        setEnvStatus(status);
+        // 初始化系统服务（包含环境检查和文件状态同步）
+        const initResult = await SystemService.initialize();
+        setEnvStatus(initResult.environmentStatus);
         
-        if (!status.system_available) {
+        // 输出文件同步结果（如果有）
+        if (initResult.fileSyncResult) {
+          const { totalChecked, totalUpdated, errors } = initResult.fileSyncResult;
+          if (totalUpdated > 0) {
+            console.log(`分析历史文件状态已同步: 检查了 ${totalChecked} 条记录，更新了 ${totalUpdated} 条`);
+          }
+          if (errors.length > 0) {
+            console.warn('文件状态同步过程中出现错误:', errors);
+          }
+        }
+        
+        if (!initResult.environmentStatus.system_available) {
           setError('系统环境检查失败，某些功能可能无法正常使用。');
         }
         

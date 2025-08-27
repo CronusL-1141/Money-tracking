@@ -38,6 +38,7 @@ import { useAppState } from '../contexts/AppStateContext';
 import { RustCommands, TimePointQuery, QueryResult, FundPool, FundPoolQueryResult, FundPoolRecord } from '../types/rust-commands';
 import { invoke } from '@tauri-apps/api/tauri';
 import { getCurrentLocalTime, formatLocalTime, createLogMessage } from '../utils/timeUtils';
+import FileDropManager from '../utils/fileDropManager';
 
 const TimePointQueryPage: React.FC = () => {
   const { t } = useTranslation();
@@ -45,7 +46,8 @@ const TimePointQueryPage: React.FC = () => {
   const theme = useTheme();
   const { 
     queryState, 
-    updateQueryState, 
+    updateQueryState,
+    updateGlobalSelectedFile,
     addQueryHistory, 
     clearQueryHistory,
     appendQueryLog,
@@ -68,8 +70,13 @@ const TimePointQueryPage: React.FC = () => {
   const [selectedPool, setSelectedPool] = useState<string>('');
   const [isQueryingPool, setIsQueryingPool] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const lastFileSelection = useRef<{filePath: string, fileName: string, timestamp: number}>({filePath: '', fileName: '', timestamp: 0});
+  
+  // 使用ref存储最新的函数和状态，避免闭包陷阱
+  const stateRef = useRef({ queryState, updateGlobalSelectedFile, appendQueryLog, showNotification, t });
+  stateRef.current = { queryState, updateGlobalSelectedFile, appendQueryLog, showNotification, t };
 
-  // 设置Tauri文件拖拽监听
+  // 设置Tauri文件拖拽监听 - 使用稳定的处理逻辑避免重复监听器
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
@@ -81,23 +88,41 @@ const TimePointQueryPage: React.FC = () => {
             const filePath = files[0];
             const fileName = filePath.split(/[/\\]/).pop() || '';
             
+            // 使用全局防重复管理器
+            if (FileDropManager.getInstance().shouldSkipDrop(filePath)) {
+              return;
+            }
+            
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
-              // 只在不是重复选择时添加日志
-              if (queryState.filePath !== filePath) {
-                appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+              // 记录文件选择信息
+              const now = Date.now();
+              lastFileSelection.current = {filePath: filePath, fileName: fileName, timestamp: now};
+              
+              // 使用ref获取当前最新状态，避免闭包问题
+              const { queryState: currentQueryState, updateGlobalSelectedFile: currentUpdate, appendQueryLog: currentAppend, showNotification: currentNotification, t: currentT } = stateRef.current;
+              
+              // 只在确实不同文件时添加日志并更新全局文件状态
+              if (currentQueryState.filePath !== filePath) {
+                console.log(`[时点查询] 文件变更: ${currentQueryState.filePath} -> ${filePath}`);
+                // 先添加本页面日志，再更新全局状态
+                currentAppend(createLogMessage(`已选择文件：${fileName}`, 'success'));
+                currentUpdate(filePath); // 使用全局更新方法，一次性同步所有页面
+              } else {
+                console.log(`[时点查询] 文件相同，跳过日志添加: ${fileName}`);
               }
-              updateQueryState({ filePath });
-              showNotification({
+              
+              currentNotification({
                 type: 'success',
-                title: t('notifications.success.file_drag_success'),
-                message: t('notifications.success.file_selected', { filename: fileName }),
+                title: currentT('notifications.success.file_drag_success'),
+                message: currentT('notifications.success.file_selected', { filename: fileName }),
               });
             } else {
-              showNotification({
+              const { showNotification: currentNotification, t: currentT } = stateRef.current;
+              currentNotification({
                 type: 'warning',
-                title: t('notifications.errors.file_format_unsupported'),
-                message: t('notifications.errors.please_select_excel'),
+                title: currentT('notifications.errors.file_format_unsupported'),
+                message: currentT('notifications.errors.please_select_excel'),
               });
             }
           }
@@ -114,7 +139,7 @@ const TimePointQueryPage: React.FC = () => {
         unlisten();
       }
     };
-  }, [showNotification]);
+  }, []); // 完全不依赖任何状态，避免重复设置
 
   // 获取处理状态的函数
   const fetchProcessStatus = async () => {
@@ -141,11 +166,23 @@ const TimePointQueryPage: React.FC = () => {
 
       if (selected && typeof selected === 'string') {
         const fileName = selected.split(/[/\\]/).pop() || '';
-        // 只在不是重复选择时添加日志
+        
+        // 防止1000ms内重复处理相同文件或任何文件选择操作  
+        const now = Date.now();
+        if ((lastFileSelection.current.filePath === selected && 
+             now - lastFileSelection.current.timestamp < 1000) ||
+            (now - lastFileSelection.current.timestamp < 300)) {
+          return; // 跳过重复处理
+        }
+        
+        // 记录文件选择信息
+        lastFileSelection.current = {filePath: selected, fileName: fileName, timestamp: now};
+        
+        // 只在不是重复选择时添加日志并更新全局文件状态
         if (queryState.filePath !== selected) {
           appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+          updateGlobalSelectedFile(selected); // 使用全局更新方法，一次性同步所有页面
         }
-        updateQueryState({ filePath: selected });
         showNotification({
           type: 'success',
           title: t('notifications.success.file_selection'),
@@ -487,6 +524,11 @@ const TimePointQueryPage: React.FC = () => {
                 label={t('query.target_row')}
                 value={rowNumber}
                 onChange={(e) => updateQueryState({ rowNumber: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isQuerying) {
+                    handleQuery();
+                  }
+                }}
                 type="number"
                 placeholder={t('placeholders.enter_row_number')}
                 disabled={isQuerying}

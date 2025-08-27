@@ -24,9 +24,9 @@ windows = { version = "0.52", features = ["Win32", "Win32_Foundation", "Win32_Gr
 raw-window-handle = "0.5"
 anyhow = "1.0"
 
-# File system and process management
+# File system management
 dirs = "5.0"
-which = "4.4"
+# 移除了 which = "4.4" - 不再需要查找Python可执行文件
 
 # Logging
 log = "0.4"

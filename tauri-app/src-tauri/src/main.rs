@@ -1,12 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tokio::process::{Command};
-use std::process::Stdio;
+// 移除了Python进程相关导入 - 现在使用Rust后端
 use std::path::PathBuf;
 
 use std::fs;
-use tokio::io::{BufReader, AsyncBufReadExt};
+// 移除了Python输出读取相关导入
 use tauri::{command, Manager};
 use tauri::State;
 use serde::{Deserialize, Serialize};
@@ -355,200 +354,7 @@ async fn run_audit(config: AuditConfig, state: State<'_, AppState>) -> Result<Au
     return run_rust_audit(config, state).await;
 }
 
-// Tauri命令：时点查询（旧Python版本，保留作为备用）
-#[command]
-async fn time_point_query_python(query: TimePointQuery, state: State<'_, AppState>) -> Result<QueryResult, String> {
-    info!("Time point query: file={}, row={}, algorithm={}", query.file_path, query.row_number, query.algorithm);
-    
-    let python_exe = find_python_executable();
-    let project_root = get_project_root()?;
-    let script_path = project_root.join("src").join("services").join("query_cli.py");
-    
-    let mut cmd = Command::new(&python_exe);
-    cmd.current_dir(&project_root)
-        .env("PYTHONIOENCODING", "utf-8")  // 设置UTF-8编码
-        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")  // Windows兼容性
-        .arg("-u")  // 无缓冲模式，立即输出
-        .arg(script_path)
-        .arg("--file")
-        .arg(&query.file_path)
-        .arg("--row")
-        .arg(&query.row_number.to_string())
-        .arg("--algorithm")
-        .arg(&query.algorithm)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    
-    // 初始化时点查询状态
-    {
-        let mut process_status = state.current_process.lock().await;
-        
-        if !process_status.output_log.is_empty() {
-            process_status.output_log.push(format!("[{}] ===== 开始时点查询 =====", 
-                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
-            ));
-        }
-        
-        process_status.output_log.push(format!("[{}] 🔍 执行时点查询: 第{}行", 
-            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), query.row_number
-        ));
-        process_status.output_log.push(format!("[{}] 📁 文件: {}", 
-            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
-            query.file_path.split(&['/', '\\'][..]).last().unwrap_or(&query.file_path)
-        ));
-        process_status.output_log.push(format!("[{}] 🔧 算法: {}", 
-            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
-            match query.algorithm.as_str() {
-                "FIFO" => "FIFO先进先出算法",
-                "BALANCE_METHOD" => "差额计算法",
-                _ => &query.algorithm
-            }
-        ));
-    }
-    
-    let result = match cmd.spawn() {
-        Ok(mut child) => {
-            let stdout = child.stdout.take().unwrap();
-            let stderr = child.stderr.take().unwrap();
-            
-            // 采用与资金分析完全一致的方式：在主线程中实时处理stderr
-            let mut stderr_reader = BufReader::new(stderr);
-            let stdout = stdout;
-            
-            let mut stdout_lines = Vec::new();
-            let mut stderr_lines = Vec::new();
-            
-            // 异步任务只负责收集stdout，不更新状态
-            let stdout_handle = tokio::spawn(async move {
-                let mut stdout_reader = BufReader::new(stdout);
-                let mut lines = Vec::new();
-                loop {
-                    let mut line = String::new();
-                    match stdout_reader.read_line(&mut line).await {
-                        Ok(0) => break, // EOF
-                        Ok(_) => {
-                            line = line.trim_end().to_string();
-                            if !line.is_empty() {
-                                lines.push(line);
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error reading stdout line: {}", e);
-                            break;
-                        }
-                    }
-                }
-                lines
-            });
-            
-            // 主线程实时读取stderr并更新日志 - 与资金分析一致
-            loop {
-                let mut line = String::new();
-                match stderr_reader.read_line(&mut line).await {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        let line_str = line.trim_end().to_string();
-                        if !line_str.is_empty() {
-                            stderr_lines.push(line_str.clone());
-                            
-                            // 实时更新进程状态 - 与资金分析完全一致的模式
-                            {
-                                let mut process_status = state.current_process.lock().await;
-                                process_status.output_log.push(format!("[{}] {}", 
-                                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), 
-                                    line_str
-                                ));
-                                
-                                // 限制日志长度，避免内存占用过多
-                                if process_status.output_log.len() > 1000 {
-                                    process_status.output_log.drain(0..100);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Error reading stderr line: {}", e);
-                        break;
-                    }
-                }
-            }
-            
-            // 等待stdout收集完成
-            if let Ok(stdout_result) = stdout_handle.await {
-                stdout_lines = stdout_result;
-            }
-            
-            // 等待子进程完成
-            let exit_status = child.wait().await;
-            let stdout_output = stdout_lines.join("\n");
-            let _stderr_output = stderr_lines.join("\n");  // 加前缀避免unused warning
-            
-            match exit_status {
-                Ok(status) if status.success() => {
-                    info!("Time point query completed successfully");
-                    let parsed_data = parse_query_output(&stdout_output);
-                    info!("解析后的数据: {:?}", parsed_data.is_some());
-                    QueryResult {
-                        success: true,
-                        data: parsed_data,
-                        message: "查询完成".to_string(), // 简化消息，详细日志已实时显示
-                    }
-                }
-                Ok(_) => {
-                    warn!("Time point query failed with non-zero exit code");
-                    QueryResult {
-                        success: false,
-                        data: None,
-                        message: "查询失败，请查看日志了解详情".to_string(),
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to wait for time point query process: {}", e);
-                    QueryResult {
-                        success: false,
-                        data: None,
-                        message: format!("进程等待失败: {}", e),
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            error!("Failed to spawn time point query process: {}", e);
-            QueryResult {
-                success: false,
-                data: None,
-                message: format!("进程启动失败: {}", e),
-            }
-        }
-    };
-    
-    // 添加到查询历史
-    if result.success {
-        let history_entry = QueryHistory {
-            id: generate_id(),
-            timestamp: Utc::now(),
-            file_path: query.file_path.clone(),
-            row_number: query.row_number,
-            algorithm: query.algorithm.clone(),
-            result: Some(result.message.clone()),
-        };
-        
-        let mut history = state.query_history.lock().await;
-        history.push(history_entry);
-        
-        // 保持历史记录数量限制
-        let config = state.app_config.lock().await;
-        let max_history = config.max_history;
-        drop(config);
-        
-        if history.len() > max_history {
-            let len = history.len();
-            history.drain(0..len - max_history);
-        }
-    }
-    
-    Ok(result)
-}
+// 移除了Python备用的时点查询函数 - 现在完全使用Rust后端
 
 // Tauri命令：检查系统环境
 #[command]
@@ -638,54 +444,19 @@ async fn stop_analysis(state: State<'_, AppState>) -> Result<bool, String> {
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
         ));
         
-        // 尝试终止Python进程
-        let mut process_killed = false;
-        if let Some(process_id) = process_status.process_id {
-            process_status.output_log.push(format!("[{}] 🔄 正在终止Python进程 (PID: {})...", 
-                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), process_id
-            ));
-            
-            // 在Windows上使用taskkill命令终止进程
-            match Command::new("taskkill")
-                .arg("/F")  // 强制终止
-                .arg("/PID") 
-                .arg(process_id.to_string())
-                .output()
-                .await
-            {
-                Ok(output) => {
-                    if output.status.success() {
-                        process_killed = true;
-                        process_status.output_log.push(format!("[{}] ✅ Python进程已成功终止", 
-                            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
-                        ));
-                    } else {
-                        let error_msg = String::from_utf8_lossy(&output.stderr);
-                        process_status.output_log.push(format!("[{}] ⚠️ 无法终止Python进程: {}", 
-                            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), error_msg
-                        ));
-                    }
-                }
-                Err(e) => {
-                    process_status.output_log.push(format!("[{}] ❌ 终止进程时发生错误: {}", 
-                        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), e
-                    ));
-                }
-            }
-        }
+        // Rust后端分析停止（无需终止外部进程）
+        process_status.output_log.push(format!("[{}] ⚡ Rust分析已停止", 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+        ));
         
         // 重置状态
         process_status.running = false;
         process_status.command = None;
         process_status.progress = Some(0.0);  // 重置进度条
         process_status.process_id = None;     // 清除进程ID
-        process_status.message = Some(if process_killed { 
-            "分析已停止，进程已终止".to_string() 
-        } else { 
-            "分析已停止".to_string() 
-        });
+        process_status.message = Some("分析已停止".to_string());
         
-        info!("Analysis stopped by user - Process termination: {}", process_killed);
+        info!("Rust backend analysis stopped by user");
         Ok(true)
     } else {
         Ok(false)
@@ -823,47 +594,7 @@ async fn validate_file_path(path: String) -> Result<bool, String> {
     Ok(file_path.exists() && file_path.is_file())
 }
 
-// 辅助函数：查找Python可执行文件
-fn find_python_executable() -> PathBuf {
-    // 按优先级查找Python
-    let candidates = vec!["python", "python3", "py"];
-    
-    for candidate in candidates {
-        if let Ok(path) = which::which(candidate) {
-            return path;
-        }
-    }
-    
-    // 如果都找不到，返回默认的python
-    PathBuf::from("python")
-}
-
-// 辅助函数：获取项目根目录
-fn get_project_root() -> Result<PathBuf, String> {
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current executable path: {}", e))?;
-    
-    // 开发模式：从tauri-app目录返回上级目录
-    // 生产模式：可能需要不同的逻辑
-    let mut path = exe_path.parent()
-        .ok_or("Failed to get parent directory")?
-        .to_path_buf();
-    
-    // 尝试找到项目根目录（包含src目录的目录）
-    for _ in 0..5 { // 最多向上查找5级
-        if path.join("src").join("main.py").exists() {
-            return Ok(path);
-        }
-        if let Some(parent) = path.parent() {
-            path = parent.to_path_buf();
-        } else {
-            break;
-        }
-    }
-    
-    // 如果找不到，返回当前目录的上级目录
-    Ok(PathBuf::from(".."))
-}
+// 移除了Python相关的辅助函数 - 现在完全使用Rust后端
 
 // 辅助函数：生成唯一ID
 fn generate_id() -> String {
@@ -875,85 +606,7 @@ fn generate_id() -> String {
     format!("id_{}", timestamp)
 }
 
-// 辅助函数：解析Python输出中的文件列表
-fn extract_output_files(output: &str) -> Vec<String> {
-    let mut files = Vec::new();
-    for line in output.lines() {
-        if line.contains("输出文件:") || line.contains("Output file:") {
-            if let Some(file_path) = line.split_once(":").map(|(_, path)| path.trim()) {
-                files.push(file_path.to_string());
-            }
-        }
-    }
-    files
-}
-
-// 辅助函数：解析查询输出为JSON
-fn parse_query_output(output: &str) -> Option<serde_json::Value> {
-    info!("开始解析查询输出，总字符数: {}", output.len());
-    info!("Python stdout输出内容:\n{}", output);
-    
-    let lines: Vec<&str> = output.lines().collect();
-    info!("输出共 {} 行", lines.len());
-    
-    // 查找JSON标记块
-    let mut json_start_idx = None;
-    let mut json_end_idx = None;
-    
-    for (i, line) in lines.iter().enumerate() {
-        if line.trim() == "JSON_RESULT_START" {
-            json_start_idx = Some(i + 1);
-            info!("找到JSON_RESULT_START标记，位置: 第{}行", i);
-        } else if line.trim() == "JSON_RESULT_END" {
-            json_end_idx = Some(i);
-            info!("找到JSON_RESULT_END标记，位置: 第{}行", i);
-            break;
-        }
-    }
-    
-    info!("JSON标记索引 - 开始: {:?}, 结束: {:?}", json_start_idx, json_end_idx);
-    
-    // 如果找到标记，解析标记之间的JSON
-    if let (Some(start), Some(end)) = (json_start_idx, json_end_idx) {
-        if start < end && start < lines.len() {
-            let json_line = lines[start];
-            info!("准备解析JSON行: {}", json_line);
-            match serde_json::from_str(json_line.trim()) {
-                Ok(json) => {
-                    info!("JSON解析成功");
-                    return Some(json);
-                }
-                Err(e) => {
-                    error!("JSON解析失败: {}", e);
-                }
-            }
-        } else {
-            error!("JSON标记索引无效: start={}, end={}, lines.len()={}", start, end, lines.len());
-        }
-    } else {
-        error!("未找到有效的JSON标记对");
-    }
-    
-    // 兼容性：尝试从输出中提取单行JSON数据（旧格式）
-    warn!("尝试使用兼容性模式解析JSON");
-    for (i, line) in lines.iter().enumerate() {
-        if line.trim().starts_with('{') && line.trim().ends_with('}') {
-            info!("找到潜在JSON行 (第{}行): {}", i, line);
-            match serde_json::from_str(line.trim()) {
-                Ok(json) => {
-                    info!("兼容性模式JSON解析成功");
-                    return Some(json);
-                }
-                Err(e) => {
-                    warn!("兼容性模式JSON解析失败: {}", e);
-                }
-            }
-        }
-    }
-    
-    error!("所有JSON解析方法都失败了");
-    None
-}
+// 移除了Python输出解析相关函数 - 现在完全使用Rust后端
 
 // 辅助函数：创建默认配置
 fn create_default_config() -> AppConfig {

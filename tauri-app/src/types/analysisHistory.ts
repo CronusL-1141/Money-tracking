@@ -27,6 +27,8 @@ export interface AnalysisHistoryRecord {
     name: string;
     path: string;
     size?: number;
+    deleted?: boolean; // 标记是否已被删除
+    deleteError?: string; // 删除失败时的错误信息
   };
   
   /** 配套场外资金池记录文件（可选） */
@@ -34,6 +36,8 @@ export interface AnalysisHistoryRecord {
     name: string;
     path: string;
     size?: number;
+    deleted?: boolean; // 标记是否已被删除
+    deleteError?: string; // 删除失败时的错误信息
   };
   
   /** 处理统计信息 */

@@ -34,6 +34,7 @@ import type { AuditConfig, AuditResult, ProcessStatus } from '../types/rust-comm
 import AnalysisHistoryPanel from '../components/AnalysisHistoryPanel';
 import { AnalysisHistoryManager } from '../utils/analysisHistoryManager';
 import { AnalysisHistoryRecord } from '../types/analysisHistory';
+import FileDropManager from '../utils/fileDropManager';
 
 const AuditPage: React.FC = () => {
   const { t } = useTranslation();
@@ -41,7 +42,8 @@ const AuditPage: React.FC = () => {
   const theme = useTheme();
   const { 
     auditState, 
-    updateAuditState, 
+    updateAuditState,
+    updateGlobalSelectedFile,
     appendAuditLog, 
     clearAuditLog 
   } = useAppState();
@@ -62,6 +64,10 @@ const AuditPage: React.FC = () => {
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState<number>(0);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const lastFileSelection = useRef<{filePath: string, fileName: string, timestamp: number}>({filePath: '', fileName: '', timestamp: 0});
+  
+  // 使用ref存储最新的函数和状态，避免闭包陷阱
+  const stateRef = useRef({ auditState, updateGlobalSelectedFile, appendAuditLog, showNotification, t });
+  stateRef.current = { auditState, updateGlobalSelectedFile, appendAuditLog, showNotification, t };
 
   // 设置Tauri文件拖拽监听
   useEffect(() => {
@@ -75,34 +81,40 @@ const AuditPage: React.FC = () => {
             const filePath = files[0];
             const fileName = filePath.split(/[/\\]/).pop() || '';
             
-            // 防止1000ms内重复处理相同文件
-            const now = Date.now();
-            if (lastFileSelection.current.filePath === filePath && 
-                now - lastFileSelection.current.timestamp < 1000) {
-              console.log('跳过重复文件处理:', fileName);
+            // 使用全局防重复管理器
+            if (FileDropManager.getInstance().shouldSkipDrop(filePath)) {
               return;
             }
             
             // 检查文件扩展名
             if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) {
               // 记录文件选择信息
+              const now = Date.now();
               lastFileSelection.current = {filePath: filePath, fileName: fileName, timestamp: now};
               
-              // 只在不是重复选择时添加日志
-              if (auditState.inputFile !== filePath) {
-                appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+              // 使用ref获取当前最新状态，避免闭包问题
+              const { auditState: currentAuditState, updateGlobalSelectedFile: currentUpdate, appendAuditLog: currentAppend, showNotification: currentNotification, t: currentT } = stateRef.current;
+              
+              // 只在确实不同文件时添加日志并更新全局文件状态
+              if (currentAuditState.inputFile !== filePath) {
+                console.log(`[审计页面] 文件变更: ${currentAuditState.inputFile} -> ${filePath}`);
+                // 先添加本页面日志，再更新全局状态
+                currentAppend(createLogMessage(`已选择文件：${fileName}`, 'success'));
+                currentUpdate(filePath); // 使用全局更新方法，一次性同步所有页面
+              } else {
+                console.log(`[审计页面] 文件相同，跳过日志添加: ${fileName}`);
               }
-              updateAuditState({ inputFile: filePath });
-              showNotification({
+              currentNotification({
                 type: 'success',
-                title: t('notifications.success.file_drag_success'),
-                message: t('notifications.success.file_selected', { filename: fileName }),
+                title: currentT('notifications.success.file_drag_success'),
+                message: currentT('notifications.success.file_selected', { filename: fileName }),
               });
             } else {
-              showNotification({
+              const { showNotification: currentNotification, t: currentT } = stateRef.current;
+              currentNotification({
                 type: 'warning',
-                title: t('notifications.errors.file_format_unsupported'),
-                message: t('notifications.errors.please_select_excel'),
+                title: currentT('notifications.errors.file_format_unsupported'),
+                message: currentT('notifications.errors.please_select_excel'),
               });
             }
           }
@@ -119,7 +131,7 @@ const AuditPage: React.FC = () => {
         unlisten();
       }
     };
-  }, [showNotification]);
+  }, []); // 完全不依赖任何状态，避免重复设置监听器
 
   // 文件选择处理
   const handleSelectFile = async () => {
@@ -136,22 +148,22 @@ const AuditPage: React.FC = () => {
       if (selected && typeof selected === 'string') {
         const fileName = selected.split(/[/\\]/).pop() || '';
         
-        // 防止500ms内重复处理相同文件
+        // 防止1000ms内重复处理相同文件或任何文件选择操作
         const now = Date.now();
-        if (lastFileSelection.current.filePath === selected && 
-            now - lastFileSelection.current.timestamp < 500) {
-          console.log('跳过重复文件处理（按钮选择）:', fileName);
-          return;
+        if ((lastFileSelection.current.filePath === selected && 
+             now - lastFileSelection.current.timestamp < 1000) ||
+            (now - lastFileSelection.current.timestamp < 300)) {
+          return; // 跳过重复处理
         }
         
         // 记录文件选择信息
         lastFileSelection.current = {filePath: selected, fileName: fileName, timestamp: now};
         
-        // 只在不是重复选择时添加日志
+        // 只在不是重复选择时添加日志并更新全局文件状态
         if (auditState.inputFile !== selected) {
           appendAuditLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+          updateGlobalSelectedFile(selected); // 使用全局更新方法，一次性同步所有页面
         }
-        updateAuditState({ inputFile: selected });
         showNotification({
           type: 'success',
           title: t('notifications.success.file_selection'),
@@ -247,14 +259,15 @@ const AuditPage: React.FC = () => {
               const currentLog = auditState.analysisLog || [];
               const backendLog = status.output_log || [];
               
-              // 找到本地日志中非后端生成的条目（如文件选择）
-              const localOnlyLogs = currentLog.filter(logEntry => 
-                !backendLog.includes(logEntry) && 
-                (logEntry.includes('已选择文件') || logEntry.includes('文件选择'))
+              // 检查是否有新的后端日志需要添加
+              const newBackendLogs = backendLog.filter(logEntry => 
+                !currentLog.includes(logEntry)
               );
               
-              // 合并：本地日志 + 后端日志
-              const mergedLog = [...localOnlyLogs, ...backendLog];
+              // 只添加新的后端日志，不重复合并本地日志
+              const mergedLog = newBackendLogs.length > 0 
+                ? [...currentLog, ...newBackendLogs]
+                : currentLog;
               updateAuditState({ analysisLog: mergedLog });
             }
           }
@@ -276,12 +289,13 @@ const AuditPage: React.FC = () => {
           const currentLog = auditState.analysisLog || [];
           const backendLog = finalStatus.output_log || [];
           
-          const localOnlyLogs = currentLog.filter(logEntry => 
-            !backendLog.includes(logEntry) && 
-            (logEntry.includes('已选择文件') || logEntry.includes('文件选择'))
+          const newBackendLogs = backendLog.filter(logEntry => 
+            !currentLog.includes(logEntry)
           );
           
-          const mergedLog = [...localOnlyLogs, ...backendLog];
+          const mergedLog = newBackendLogs.length > 0 
+            ? [...currentLog, ...newBackendLogs]
+            : currentLog;
           updateAuditState({ analysisLog: mergedLog });
         }
       } catch (error) {
