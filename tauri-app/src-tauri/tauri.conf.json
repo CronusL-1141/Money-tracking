@@ -7,7 +7,7 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "涉案资金追踪分析系统",
+    "productName": "FLUX分析系统",
     "version": "2.0.0"
   },
   "tauri": {
@@ -80,7 +80,7 @@
         "icons/icon.ico"
       ],
       "category": "Business",
-      "shortDescription": "涉案资金追踪分析系统",
+      "shortDescription": "FLUX分析系统",
       "windows": {},
       "externalBin": [],
       "resources": []
@@ -92,7 +92,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "涉案资金追踪分析系统",
+        "title": "FLUX分析系统",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
