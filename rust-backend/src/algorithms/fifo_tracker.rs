@@ -314,6 +314,11 @@ impl FifoTracker {
         &self.base.investment_pools
     }
     
+    /// 获取base引用（用于访问场外资金池记录）
+    pub fn get_base(&self) -> &TrackerBase {
+        &self.base
+    }
+    
     /// 获取FIFO队列状态（用于调试）
     pub fn get_queue_info(&self) -> String {
         if self.fund_inflow_queue.is_empty() {

@@ -249,6 +249,11 @@
     "fifo": "FIFO计算法",
     "balance_method": "差额计算法"
   },
+
+  "algorithms": {
+    "FIFO": "FIFO算法",
+    "BALANCE_METHOD": "差额计算法"
+  },
   
   "ui": {
     "panels": {
@@ -375,5 +380,72 @@
     "click_check_env_hint": "点击检查环境按钮来验证Python配置",
     "app_update": "应用更新",
     "version_info": "版本信息"
+  },
+
+  "analysis_history": {
+    "title": "分析历史记录",
+    "no_records": "还没有分析历史记录。完成第一次分析后，记录将显示在这里。",
+    "refresh_status": "刷新文件状态",
+    "status_updated": "文件状态已更新",
+    "status_check_completed": "检查了 {{totalChecked}} 条记录，更新了 {{totalUpdated}} 条记录的文件状态",
+    "status_normal": "文件状态正常",
+    "all_files_current": "检查了 {{totalChecked}} 条记录，所有文件状态都是最新的",
+    "refresh_failed": "刷新失败",
+    "refresh_error": "无法更新文件状态，请稍后重试",
+    "delete_success": "删除成功",
+    "delete_success_message": "分析记录和所有相关文件已成功删除",
+    "partial_delete_success": "部分删除成功",
+    "partial_delete_message": "部分文件已删除，但有些文件删除失败：{{errors}}。记录已更新以反映当前状态。",
+    "delete_failed": "删除失败",
+    "delete_failed_message": "无法删除分析记录：{{errors}}。记录已保留。",
+    "operation_failed": "操作失败",
+    "delete_error": "删除记录时发生意外错误，请稍后重试",
+    "open_failed": "打开失败",
+    "open_main_failed": "无法打开分析结果文件，可能文件不存在或已被移动。",
+    "open_pool_failed": "无法打开场外资金池记录文件，可能文件不存在或已被移动。",
+    "file_operation_error": "打开文件时发生错误，请检查文件是否存在。",
+    "save_as_failed": "另存为操作取消或失败",
+    "status": {
+      "success": "成功",
+      "failed": "失败",
+      "processing": "处理中"
+    },
+    "stats": {
+      "records_count": "{{count}}条记录",
+      "validation_fixes": "修复{{count}}处错误"
+    },
+    "file_info": {
+      "input_file": "输入文件",
+      "main_result": "主分析结果",
+      "pool_record": "配套场外资金池记录",
+      "file_deleted": "[已删除]",
+      "delete_failed": "[删除失败: {{error}}]",
+      "no_pool_file": "该记录无场外资金池文件"
+    },
+    "tooltips": {
+      "open_main": "打开分析结果",
+      "open_main_deleted": "文件已删除，无法打开",
+      "open_main_error": "文件删除失败：{{error}}",
+      "open_pool": "打开场外资金池记录",
+      "open_pool_deleted": "场外资金池文件已删除，无法打开",
+      "open_pool_error": "场外文件删除失败：{{error}}",
+      "save_as": "另存为",
+      "delete_record": "删除记录"
+    },
+    "delete_dialog": {
+      "title": "删除分析记录",
+      "confirm_message": "确定要删除这个分析记录吗？系统将尝试删除以下文件：",
+      "files_to_delete": "将被删除的文件：",
+      "main_file": "主分析结果",
+      "pool_file": "场外资金池记录",
+      "warning": "注意：如果部分文件无法删除（如正在被使用），记录将保留并显示删除状态。此操作无法撤销。",
+      "record_info": {
+        "algorithm": "算法",
+        "file": "文件",
+        "time": "时间"
+      },
+      "cancel": "取消",
+      "confirm": "删除"
+    }
   }
 }

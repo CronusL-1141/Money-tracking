@@ -23,22 +23,34 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Save as SaveIcon,
   Clear as ClearIcon,
   CloudUpload as UploadIcon,
   FolderOpen as FolderIcon,
   Description as FileIcon,
+  FileDownload as ExportIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
-import { open } from '@tauri-apps/api/dialog';
+import { open, save } from '@tauri-apps/api/dialog';
 import { listen } from '@tauri-apps/api/event';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAppState } from '../contexts/AppStateContext';
-import { RustCommands, TimePointQuery, QueryResult, FundPool, FundPoolQueryResult, FundPoolRecord } from '../types/rust-commands';
+import { RustCommands, TimePointQuery, QueryResult, FundPool } from '../types/rust-commands';
 import { invoke } from '@tauri-apps/api/tauri';
 import { getCurrentLocalTime, formatLocalTime, createLogMessage } from '../utils/timeUtils';
 import FileDropManager from '../utils/fileDropManager';
+
+// 资金池查询结果接口
+interface FundPoolQueryResult {
+  success: boolean;
+  pool_name: string;
+  message?: string;
+  records?: any[];
+  summary?: {
+    current_balance?: number;
+    record_count?: number;
+  };
+}
 
 const TimePointQueryPage: React.FC = () => {
   const { t } = useTranslation();
@@ -69,6 +81,8 @@ const TimePointQueryPage: React.FC = () => {
   const [fundPoolResult, setFundPoolResult] = useState<FundPoolQueryResult | null>(null);
   const [selectedPool, setSelectedPool] = useState<string>('');
   const [isQueryingPool, setIsQueryingPool] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('');
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const lastFileSelection = useRef<{filePath: string, fileName: string, timestamp: number}>({filePath: '', fileName: '', timestamp: 0});
   
@@ -268,9 +282,14 @@ const TimePointQueryPage: React.FC = () => {
       // 调用后端真实查询功能
       const queryResult: QueryResult = await RustCommands.timePointQuery(queryParams);
       
+      console.log('后端查询结果:', queryResult); // 调试信息
+      
       if (queryResult.success && queryResult.data) {
         // 正确提取嵌套的数据结构
         const data = queryResult.data;
+        console.log('提取数据对象:', data); // 调试信息
+        console.log('data.available_fund_pools:', data.available_fund_pools); // 调试信息
+        console.log('data.fund_pool_records:', data.fund_pool_records); // 调试信息
         const newQueryResult = {
           rowNumber: rowNum,
           timestamp: getCurrentLocalTime('iso'),
@@ -287,7 +306,9 @@ const TimePointQueryPage: React.FC = () => {
           target_row_data: data.target_row_data,
           tracker_state: data.tracker_state,
           processing_stats: data.processing_stats,
-          recent_steps: data.recent_steps
+          recent_steps: data.recent_steps,
+          available_fund_pools: data.available_fund_pools,
+          fund_pool_records: data.fund_pool_records
         };
         
         const completedMessage = (() => {
@@ -317,7 +338,10 @@ const TimePointQueryPage: React.FC = () => {
           result: queryResult.data  // 保持原始数据结构
         };
         addQueryHistory(historyItem);
+        console.log('准备更新状态，newQueryResult:', newQueryResult); // 调试信息
+        console.log('newQueryResult.available_fund_pools:', newQueryResult.available_fund_pools); // 调试信息
         updateQueryState({ queryResult: newQueryResult });
+        console.log('状态更新后，queryResult应该是:', newQueryResult); // 调试信息
         
         // 添加查询成功日志
         const processingTime = data.processing_time ? data.processing_time.toFixed(3) : '0.000';
@@ -357,50 +381,6 @@ const TimePointQueryPage: React.FC = () => {
     }
   };
 
-  const handleSaveResult = async () => {
-    if (!queryResult) {
-      return;
-    }
-
-    try {
-      // 构造保存数据
-      const saveData = {
-        query_info: {
-          file_path: filePath,
-          row_number: queryResult.target_row,
-          algorithm: queryResult.algorithm,
-          query_time: queryResult.query_time
-        },
-        result_data: queryResult
-      };
-
-      // 使用浏览器下载功能保存为JSON文件
-      const dataStr = JSON.stringify(saveData, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `time_point_query_row_${queryResult.target_row}_${getCurrentLocalTime('filename')}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showNotification({
-        type: 'success',
-        title: t('notifications.success.save_success'),
-        message: t('notifications.success.save_completed'),
-      });
-    } catch (error) {
-      console.error('Save failed:', error);
-      showNotification({
-        type: 'error',
-        title: t('notifications.errors.save_failed'),
-        message: t('notifications.errors.save_error', { error }),
-      });
-    }
-  };
 
   const handleClearHistory = () => {
     clearQueryHistory();
@@ -409,25 +389,67 @@ const TimePointQueryPage: React.FC = () => {
   };
 
   // 资金池查询处理函数
-  const handleFundPoolQuery = async () => {
-    if (!selectedPool || !filePath || !rowNumber || isQueryingPool) return;
+  const handleFundPoolQuery = async (poolName?: string) => {
+    const targetPool = poolName || selectedPool;
+    if (!targetPool || !queryResult) return;
     
     setIsQueryingPool(true);
     try {
-      const result = await RustCommands.queryFundPool(
-        selectedPool,
-        filePath,
-        parseInt(rowNumber),
-        algorithm
-      );
+      appendQueryLog(createLogMessage(`获取资金池详情：${targetPool}`, 'info'));
       
-      setFundPoolResult(result);
+      // 从时点查询结果中获取真实的资金池记录
+      const fundPoolRecords = queryResult.fund_pool_records?.[targetPool];
+      const selectedPoolData = queryResult.available_fund_pools?.find((pool: any) => pool.name === targetPool);
       
-      if (result.success) {
-        appendQueryLog(createLogMessage(`资金池查询成功：${selectedPool}`, 'success'));
-        appendQueryLog(createLogMessage(`找到 ${result.summary?.record_count || 0} 条交易记录`, 'info'));
+      if (fundPoolRecords && fundPoolRecords.length > 0) {
+        // 计算汇总信息
+        let totalInflow = 0;
+        let totalOutflow = 0;
+        let currentBalance = 0;
+        
+        for (const record of fundPoolRecords) {
+          totalInflow += parseFloat(record['入金'] || 0);
+          totalOutflow += parseFloat(record['出金'] || 0);
+          currentBalance = parseFloat(record['总余额'] || 0); // 使用最后一条记录的余额
+        }
+        
+        setFundPoolResult({
+          success: true,
+          pool_name: targetPool,
+          records: fundPoolRecords,
+          summary: {
+            total_inflow: totalInflow,
+            total_outflow: totalOutflow,
+            current_balance: currentBalance,
+            record_count: fundPoolRecords.length,
+          }
+        });
+        
+        appendQueryLog(createLogMessage(`资金池${targetPool}查询成功：${fundPoolRecords.length}条交易记录`, 'success'));
+        appendQueryLog(createLogMessage(`当前余额：¥${currentBalance.toLocaleString()}，累计入金：¥${totalInflow.toLocaleString()}`, 'info'));
+      } else if (selectedPoolData) {
+        // 资金池存在但没有交易记录
+        setFundPoolResult({
+          success: true,
+          pool_name: targetPool,
+          records: [],
+          summary: {
+            total_inflow: 0,
+            total_outflow: 0,
+            current_balance: selectedPoolData.total_amount,
+            record_count: 0,
+          }
+        });
+        
+        appendQueryLog(createLogMessage(`资金池${targetPool}存在但无交易记录`, 'info'));
+        appendQueryLog(createLogMessage(`当前余额：¥${selectedPoolData.total_amount.toLocaleString()}`, 'info'));
       } else {
-        appendQueryLog(createLogMessage(`资金池查询失败：${result.message || '未知错误'}`, 'error'));
+        setFundPoolResult({
+          success: false,
+          pool_name: targetPool,
+          message: '未找到该资金池信息'
+        });
+        appendQueryLog(createLogMessage(`未找到资金池：${targetPool}`, 'error'));
       }
     } catch (error) {
       appendQueryLog(createLogMessage(`资金池查询异常：${error}`, 'error'));
@@ -437,151 +459,352 @@ const TimePointQueryPage: React.FC = () => {
     }
   };
 
+  // 导出当前时点全部资金池信息到Excel
+  const handleExportFundPool = async () => {
+    try {
+      if (!queryResult || !queryResult.available_fund_pools || !queryResult.fund_pool_records) {
+        showNotification({
+          type: 'warning',
+          title: '导出失败',
+          message: '没有可导出的资金池数据',
+        });
+        return;
+      }
+      
+      // 显示文件保存对话框
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
+      const defaultFileName = `当前时点资金池信息_${timestamp}.xlsx`;
+      
+      // 确定默认保存目录（输入文件的目录）
+      const inputDir = filePath ? filePath.substring(0, filePath.lastIndexOf('\\')) : '';
+      const defaultPath = inputDir ? `${inputDir}\\${defaultFileName}` : defaultFileName;
+      
+      const outputPath = await save({
+        title: '另存为Excel文件',
+        defaultPath: defaultPath,
+        filters: [{
+          name: 'Excel文件',
+          extensions: ['xlsx']
+        }]
+      });
+      
+      if (!outputPath) {
+        // 用户取消了保存
+        return;
+      }
+      
+      appendQueryLog(createLogMessage('开始导出当前时点全部资金池信息到Excel', 'info'));
+      
+      // 构造Excel导出数据
+      const exportData = {
+        query_info: {
+          file_path: filePath,
+          target_row: rowNumber,
+          algorithm: algorithm,
+          query_time: queryResult.query_time,
+        },
+        fund_pools: queryResult.available_fund_pools,
+        fund_pool_records: queryResult.fund_pool_records,
+        export_type: "current_timepoint_fund_pools",
+        output_path: outputPath // 添加用户选择的输出路径
+      };
+      
+      // 调用后端Excel导出功能
+      const result = await invoke('export_fund_pools_excel', { request: exportData });
+      
+      if (result.success) {
+        appendQueryLog(createLogMessage(`当前时点资金池信息已导出到：${result.output_path}`, 'success'));
+        showNotification({
+          type: 'success',
+          title: '导出成功',
+          message: `当前时点资金池信息已导出到：${result.output_path}`,
+        });
+      } else {
+        throw new Error(result.message || '导出失败');
+      }
+      
+    } catch (error) {
+      const errorMsg = `资金池信息导出异常：${error}`;
+      appendQueryLog(createLogMessage(errorMsg, 'error'));
+      console.error('Fund pool export failed:', error);
+      showNotification({
+        type: 'error',
+        title: '导出异常',
+        message: errorMsg,
+      });
+    }
+  };
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 2 }}>
       <Typography variant="h4" component="h1" gutterBottom>
         {t('query.title')}
       </Typography>
       
+      {/* 第一行和第二行：使用嵌套Grid实现2x2布局 */}
       <Grid container spacing={3}>
-        {/* 查询配置面板 */}
+        {/* 左侧列容器 */}
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                {t('ui.panels.query_config')}
-              </Typography>
-              
-              {/* 文件拖拽区域 */}
-              <Paper
-                ref={dropZoneRef}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                sx={{
-                  p: 2,
-                  mb: 2,
-                  border: isDragOver ? `2px dashed ${theme.palette.primary.main}` : `2px dashed ${theme.palette.divider}`,
-                  backgroundColor: isDragOver 
-                    ? theme.palette.mode === 'dark' ? 'rgba(144, 202, 249, 0.08)' : 'rgba(25, 118, 210, 0.08)'
-                    : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                  borderRadius: 2,
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  '&:hover': {
-                    borderColor: theme.palette.primary.main,
-                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                  }
-                }}
-                // onClick={(e) => {
-                //   // 检查点击目标是否为按钮或按钮内部元素
-                //   const isButtonClick = (e.target as Element).closest('button') !== null;
-                //   if (!isButtonClick) {
-                //     handleSelectFile();
-                //   }
-                // }}
-                elevation={isDragOver ? 3 : 1}
-              >
-                <Box>
-                  <UploadIcon 
-                    sx={{ 
-                      fontSize: 32, 
-                      color: isDragOver ? theme.palette.primary.main : theme.palette.text.secondary,
-                      mb: 0.5 
-                    }} 
-                  />
-                  <Typography variant="body1" gutterBottom>
-                    {filePath ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                        <FileIcon />
-                        {filePath.split(/[/\\]/).pop()}
-                      </Box>
-                    ) : (
-                      isDragOver ? t('ui.dragdrop.release_to_select') : t('ui.dragdrop.drag_excel_here')
-                    )}
+          <Grid container spacing={6}>
+            {/* 左上：查询配置面板 */}
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    {t('ui.panels.query_config')}
                   </Typography>
-                  <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
-                    {filePath ? t('ui.dragdrop.click_to_change') : t('ui.dragdrop.supported_formats')}
-                  </Typography>
-                  <Button
-                    variant={filePath ? "outlined" : "contained"}
-                    size="small"
-                    startIcon={<FolderIcon />}
-                    disabled={isQuerying}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectFile();
+                  
+                  {/* 文件拖拽区域 */}
+                  <Paper
+                    ref={dropZoneRef}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    sx={{
+                      p: 2,
+                      mb: 2,
+                      border: isDragOver ? `2px dashed ${theme.palette.primary.main}` : `2px dashed ${theme.palette.divider}`,
+                      backgroundColor: isDragOver 
+                        ? theme.palette.mode === 'dark' ? 'rgba(144, 202, 249, 0.08)' : 'rgba(25, 118, 210, 0.08)'
+                        : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                      borderRadius: 2,
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        borderColor: theme.palette.primary.main,
+                        backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                      }
                     }}
+                    elevation={isDragOver ? 3 : 1}
                   >
-                    {filePath ? t('ui.buttons.change_file') : t('ui.buttons.browse_file')}
+                    <Box>
+                      <UploadIcon 
+                        sx={{ 
+                          fontSize: 32, 
+                          color: isDragOver ? theme.palette.primary.main : theme.palette.text.secondary,
+                          mb: 0.5 
+                        }} 
+                      />
+                      <Typography variant="body1" gutterBottom>
+                        {filePath ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                            <FileIcon />
+                            {filePath.split(/[/\\]/).pop()}
+                          </Box>
+                        ) : (
+                          isDragOver ? t('ui.dragdrop.release_to_select') : t('ui.dragdrop.drag_excel_here')
+                        )}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
+                        {filePath ? t('ui.dragdrop.click_to_change') : t('ui.dragdrop.supported_formats')}
+                      </Typography>
+                      <Button
+                        variant={filePath ? "outlined" : "contained"}
+                        size="small"
+                        startIcon={<FolderIcon />}
+                        disabled={isQuerying}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectFile();
+                        }}
+                      >
+                        {filePath ? t('ui.buttons.change_file') : t('ui.buttons.browse_file')}
+                      </Button>
+                    </Box>
+                  </Paper>
+
+                  <TextField
+                    fullWidth
+                    label={t('query.target_row')}
+                    value={rowNumber}
+                    onChange={(e) => updateQueryState({ rowNumber: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !isQuerying) {
+                        handleQuery();
+                      }
+                    }}
+                    type="number"
+                    placeholder={t('placeholders.enter_row_number')}
+                    disabled={isQuerying}
+                    sx={{ mb: 2 }}
+                  />
+
+                  <FormControl fullWidth sx={{ mb: 2 }}>
+                    <InputLabel id="algorithm-select-label">
+                      {t('audit.algorithm')}
+                    </InputLabel>
+                    <Select
+                      labelId="algorithm-select-label"
+                      value={algorithm}
+                      label={t('audit.algorithm')}
+                      onChange={(e) => updateQueryState({ algorithm: e.target.value as 'FIFO' | 'BALANCE_METHOD' })}
+                      disabled={isQuerying}
+                    >
+                      <MenuItem value="FIFO">{t('audit.fifo')}</MenuItem>
+                      <MenuItem value="BALANCE_METHOD">{t('audit.balance_method')}</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <Button
+                    variant="contained"
+                    startIcon={<SearchIcon />}
+                    onClick={handleQuery}
+                    disabled={!filePath || !rowNumber || isQuerying}
+                    fullWidth
+                  >
+                    {isQuerying ? t('common.processing') : t('query.query_button')}
                   </Button>
-                </Box>
-              </Paper>
+                </CardContent>
+              </Card>
+            </Grid>
 
-              <TextField
-                fullWidth
-                label={t('query.target_row')}
-                value={rowNumber}
-                onChange={(e) => updateQueryState({ rowNumber: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isQuerying) {
-                    handleQuery();
-                  }
-                }}
-                type="number"
-                placeholder={t('placeholders.enter_row_number')}
-                disabled={isQuerying}
-                sx={{ mb: 2 }}
-              />
+            {/* 左下：资金池信息区域 */}
+            <Grid item xs={12}>
+              <Card sx={{ height: 'fit-content', maxHeight: '600px' }}>
+                <CardContent sx={{ maxHeight: '550px', overflow: 'auto' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">
+                      资金池信息
+                    </Typography>
+                    {queryResult && queryResult.available_fund_pools && queryResult.available_fund_pools.length > 0 && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<ExportIcon />}
+                        onClick={handleExportFundPool}
+                      >
+                        另存为
+                      </Button>
+                    )}
+                  </Box>
+                  
+                  {/* 资金池选择 */}
+                  {queryResult && queryResult.available_fund_pools && queryResult.available_fund_pools.length > 0 ? (
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                        发现活跃资金池: {queryResult.available_fund_pools.length} 个
+                      </Typography>
+                      
+                      {/* 分类筛选 */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                          <InputLabel>资金池类型</InputLabel>
+                          <Select
+                            value={selectedCategory}
+                            onChange={(e) => {
+                              setSelectedCategory(e.target.value);
+                              setSelectedSubCategory('');
+                              setSelectedPool('');
+                            }}
+                            label="资金池类型"
+                          >
+                            <MenuItem value="">全部类型</MenuItem>
+                            {(() => {
+                              // 提取所有资金池的类型（"-"之前的部分）
+                              const categories = Array.from(new Set(
+                                queryResult.available_fund_pools.map((pool: FundPool) => {
+                                  const parts = pool.name.split('-');
+                                  return parts[0] || pool.name;
+                                })
+                              )).sort();
+                              return categories.map(category => (
+                                <MenuItem key={category} value={category}>
+                                  {category}
+                                </MenuItem>
+                              ));
+                            })()}
+                          </Select>
+                        </FormControl>
 
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="algorithm-select-label">
-                  {t('audit.algorithm')}
-                </InputLabel>
-                <Select
-                  labelId="algorithm-select-label"
-                  value={algorithm}
-                  label={t('audit.algorithm')}
-                  onChange={(e) => updateQueryState({ algorithm: e.target.value as 'FIFO' | 'BALANCE_METHOD' })}
-                  disabled={isQuerying}
-                >
-                  <MenuItem value="FIFO">{t('audit.fifo')}</MenuItem>
-                  <MenuItem value="BALANCE_METHOD">{t('audit.balance_method')}</MenuItem>
-                </Select>
-              </FormControl>
-
-              <Button
-                variant="contained"
-                startIcon={<SearchIcon />}
-                onClick={handleQuery}
-                disabled={!filePath || !rowNumber || isQuerying}
-                fullWidth
-              >
-                {isQuerying ? t('common.processing') : t('query.query_button')}
-              </Button>
-            </CardContent>
-          </Card>
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                          <InputLabel>子类型</InputLabel>
+                          <Select
+                            value={selectedSubCategory}
+                            onChange={(e) => {
+                              setSelectedSubCategory(e.target.value);
+                              setSelectedPool('');
+                            }}
+                            label="子类型"
+                            disabled={!selectedCategory}
+                          >
+                            <MenuItem value="">全部子类型</MenuItem>
+                            {(() => {
+                              if (!selectedCategory) return [];
+                              // 获取选定类型下的所有子类型
+                              const subCategories = Array.from(new Set(
+                                queryResult.available_fund_pools
+                                  .filter((pool: FundPool) => pool.name.startsWith(selectedCategory + '-'))
+                                  .map((pool: FundPool) => {
+                                    const parts = pool.name.split('-');
+                                    return parts.slice(1).join('-') || '其他';
+                                  })
+                              )).sort();
+                              return subCategories.map(subCategory => (
+                                <MenuItem key={subCategory} value={subCategory}>
+                                  {subCategory}
+                                </MenuItem>
+                              ));
+                            })()}
+                          </Select>
+                        </FormControl>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                        <Button
+                          variant="contained"
+                          onClick={() => {
+                            // 通过类型和子类型自动确定资金池
+                            if (selectedCategory && selectedSubCategory) {
+                              const targetPoolName = `${selectedCategory}-${selectedSubCategory}`;
+                              const matchingPool = queryResult.available_fund_pools.find(
+                                (pool: FundPool) => pool.name === targetPoolName
+                              );
+                              if (matchingPool) {
+                                setSelectedPool(targetPoolName);
+                                handleFundPoolQuery(targetPoolName);
+                              }
+                            }
+                          }}
+                          disabled={!selectedCategory || !selectedSubCategory || isQueryingPool}
+                          startIcon={<SearchIcon />}
+                          sx={{ minWidth: 120 }}
+                        >
+                          {isQueryingPool ? '查询中...' : '查询详情'}
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : queryResult ? (
+                    <Box sx={{ mb: 3 }}>
+                      <Alert severity="info">
+                        当前时点尚未发现投资产品资金池
+                        <br />
+                        <small>资金池通常出现在申购/赎回等投资产品交易中</small>
+                      </Alert>
+                    </Box>
+                  ) : (
+                    <Box sx={{ mb: 3 }}>
+                      <Alert severity="info">
+                        请先执行时点查询以获取资金池信息
+                        <br />
+                        <small>选择Excel文件并输入行号后点击查询按钮</small>
+                      </Alert>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
         </Grid>
 
-        {/* 查询结果面板 */}
+        {/* 右侧：查询结果面板 - 占据右侧整列 */}
         <Grid item xs={12} md={6}>
-          <Card>
+          <Card sx={{ height: 'fit-content' }}>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
                   {t('query.query_result')}
                 </Typography>
-                {queryResult && (
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSaveResult}
-                  >
-                    {t('query.save_result')}
-                  </Button>
-                )}
               </Box>
               
               {queryResult ? (
@@ -600,7 +823,8 @@ const TimePointQueryPage: React.FC = () => {
                       console.log('i18n string:', i18nString);
                       
                       // 如果i18n插值失败，回退到直接字符串
-                      return i18nString.includes('{') ? directString : i18nString;
+                      const hasPlaceholder = i18nString.indexOf('{') !== -1;
+                      return hasPlaceholder ? directString : i18nString;
                     })()}
                   </Alert>
                   
@@ -615,43 +839,44 @@ const TimePointQueryPage: React.FC = () => {
                       console.log('Row i18n string:', i18nString);
                       console.log('Row direct string:', directString);
                       
-                      return i18nString.includes('{') ? directString : i18nString;
+                      const hasPlaceholder = i18nString.indexOf('{') !== -1;
+                      return hasPlaceholder ? directString : i18nString;
                     })()}
                   </Typography>
                   <TableContainer component={Paper} sx={{ mb: 2 }}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>{t('table.headers.row_number')}</TableCell>
-                          <TableCell>{queryResult.target_row}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.row_number')}</TableCell>
+                          <TableCell sx={{ width: '70%', textAlign: 'center' }}>{queryResult.target_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.timestamp')}</TableCell>
-                          <TableCell>{queryResult.target_row_data?.timestamp || '--'}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.timestamp')}</TableCell>
+                          <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>{queryResult.target_row_data?.timestamp || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.income_amount')}</TableCell>
-                          <TableCell>¥{parseFloat(queryResult.target_row_data?.income_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.income_amount')}</TableCell>
+                          <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.target_row_data?.income_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.expense_amount')}</TableCell>
-                          <TableCell>¥{parseFloat(queryResult.target_row_data?.expense_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.expense_amount')}</TableCell>
+                          <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.target_row_data?.expense_amount || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.balance')}</TableCell>
-                          <TableCell>¥{parseFloat(queryResult.target_row_data?.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.balance')}</TableCell>
+                          <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.target_row_data?.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.fund_attr')}</TableCell>
-                          <TableCell>{queryResult.target_row_data?.fund_attr || '--'}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.fund_attr')}</TableCell>
+                          <TableCell sx={{ width: '70%', textAlign: 'center' }}>{queryResult.target_row_data?.fund_attr || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.flow_type')}</TableCell>
-                          <TableCell>{queryResult.target_row_data?.flow_type || '--'}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.flow_type')}</TableCell>
+                          <TableCell sx={{ width: '70%', textAlign: 'center' }}>{queryResult.target_row_data?.flow_type || '--'}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.behavior')}</TableCell>
-                          <TableCell>{queryResult.target_row_data?.behavior || '--'}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.behavior')}</TableCell>
+                          <TableCell sx={{ width: '70%', wordBreak: 'break-word' }}>{queryResult.target_row_data?.behavior || '--'}</TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
@@ -665,28 +890,20 @@ const TimePointQueryPage: React.FC = () => {
                       <TableBody>
                         {queryResult.tracker_state?.personal_balance !== undefined && (
                           <TableRow>
-                            <TableCell>{t('table.headers.personal_balance')}</TableCell>
-                            <TableCell>¥{parseFloat(queryResult.tracker_state.personal_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                            <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.personal_balance')}</TableCell>
+                            <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.tracker_state.personal_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
                         {queryResult.tracker_state?.company_balance !== undefined && (
                           <TableRow>
-                            <TableCell>{t('table.headers.company_balance')}</TableCell>
-                            <TableCell>¥{parseFloat(queryResult.tracker_state.company_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                            <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.company_balance')}</TableCell>
+                            <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.tracker_state.company_balance).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
-                        {queryResult.tracker_state?.total_misappropriation !== undefined && (
+                        {queryResult.tracker_state?.net_flow !== undefined && (
                           <TableRow>
-                            <TableCell>{t('table.headers.cumulative_misappropriation')}</TableCell>
-                            <TableCell>¥{parseFloat(queryResult.tracker_state.total_misappropriation).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
-                          </TableRow>
-                        )}
-                        {queryResult.tracker_state?.funding_gap !== undefined && (
-                          <TableRow>
-                            <TableCell>{t('table.headers.funding_gap')}</TableCell>
-                            <TableCell style={{color: queryResult.tracker_state.funding_gap >= 0 ? theme.palette.error.main : theme.palette.success.main}}>
-                              ¥{parseFloat(queryResult.tracker_state.funding_gap).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                            </TableCell>
+                            <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.net_flow')}</TableCell>
+                            <TableCell sx={{ width: '70%', whiteSpace: 'nowrap', textAlign: 'center' }}>¥{parseFloat(queryResult.tracker_state.net_flow).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                           </TableRow>
                         )}
                       </TableBody>
@@ -696,26 +913,31 @@ const TimePointQueryPage: React.FC = () => {
                   <Typography variant="subtitle2" gutterBottom>
                     {t('ui.panels.processing_stats')}
                   </Typography>
-                  <TableContainer component={Paper}>
+                  <TableContainer component={Paper} sx={{ mb: 2 }}>
                     <Table size="small">
                       <TableBody>
                         <TableRow>
-                          <TableCell>{t('table.headers.total_rows')}</TableCell>
-                          <TableCell>{queryResult.total_rows}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.total_rows')}</TableCell>
+                          <TableCell sx={{ width: '70%', textAlign: 'center' }}>{queryResult.total_rows}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.processed_rows')}</TableCell>
-                          <TableCell>{queryResult.processing_stats?.last_processed_row}</TableCell>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.processed_rows')}</TableCell>
+                          <TableCell sx={{ width: '70%', textAlign: 'center' }}>{queryResult.processing_stats?.last_processed_row}</TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell>{t('table.headers.error_count')}</TableCell>
-                          <TableCell style={{color: queryResult.processing_stats?.error_count > 0 ? theme.palette.error.main : theme.palette.success.main}}>
+                          <TableCell sx={{ width: '30%', fontWeight: 'bold' }}>{t('table.headers.error_count')}</TableCell>
+                          <TableCell sx={{ 
+                            width: '70%', 
+                            textAlign: 'center',
+                            color: queryResult.processing_stats?.error_count > 0 ? theme.palette.error.main : theme.palette.success.main
+                          }}>
                             {queryResult.processing_stats?.error_count || 0}
                           </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
                   </TableContainer>
+
                 </Box>
               ) : (
                 <Alert severity="info">
@@ -725,106 +947,121 @@ const TimePointQueryPage: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
+      </Grid>
 
-        {/* 资金池查询区域 */}
-        {queryResult?.available_fund_pools && queryResult.available_fund_pools.length > 0 && (
+      {/* 第三行：资金池详情显示 - 全宽度展示详细交易记录 */}
+      {fundPoolResult && (
+        <Grid container spacing={3} sx={{ mt: 2 }}>
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  资金池查询
-                </Typography>
-                
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', mb: 3 }}>
-                  <FormControl sx={{ minWidth: 200 }} size="small">
-                    <InputLabel>选择资金池</InputLabel>
-                    <Select
-                      value={selectedPool}
-                      onChange={(e) => setSelectedPool(e.target.value)}
-                      label="选择资金池"
-                    >
-                      {queryResult.available_fund_pools.map((pool: FundPool) => (
-                        <MenuItem key={pool.name} value={pool.name}>
-                          {pool.name} (¥{parseFloat(pool.total_amount).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})})
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  
-                  <Button
-                    variant="contained"
-                    onClick={handleFundPoolQuery}
-                    disabled={!selectedPool || isQueryingPool}
-                    startIcon={<SearchIcon />}
-                    sx={{ minWidth: 120 }}
-                  >
-                    {isQueryingPool ? '查询中...' : '查询详情'}
-                  </Button>
-                </Box>
-                
-                {/* 资金池详情表格 */}
-                {fundPoolResult?.success && fundPoolResult.records && (
+                {fundPoolResult.success && fundPoolResult.records && fundPoolResult.records.length > 0 && (
                   <Box>
                     <Typography variant="subtitle2" gutterBottom>
-                      {fundPoolResult.pool_name} - 详细交易记录
+                      {fundPoolResult.pool_name} - 详细交易记录 ({fundPoolResult.records.length}条)
                     </Typography>
                     <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
                       <Table size="small" stickyHeader>
                         <TableHead>
                           <TableRow>
-                            <TableCell>交易时间</TableCell>
-                            <TableCell>入金</TableCell>
-                            <TableCell>出金</TableCell>
-                            <TableCell>总余额</TableCell>
-                            <TableCell>单笔资金占比</TableCell>
-                            <TableCell>总资金占比</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>交易时间</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>资金流向</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>总余额</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>个人余额</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>公司余额</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>累计申购</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>累计赎回</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>净盈亏</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {fundPoolResult.records.map((record, index) => (
-                            <TableRow key={index} sx={{
-                              '&:last-child': {
-                                backgroundColor: theme.palette.action.hover,
-                                fontWeight: 'bold'
+                          {fundPoolResult.records.map((record, index) => {
+                            const inflow = parseFloat(record['入金'] || 0);
+                            const outflow = parseFloat(record['出金'] || 0);
+                            
+                            let flowDisplay = '';
+                            if (inflow > 0 && outflow > 0) {
+                              flowDisplay = `入金 ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})} / 出金 ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                            } else if (inflow > 0) {
+                              flowDisplay = `入金 ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                            } else if (outflow > 0) {
+                              flowDisplay = `出金 ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                            } else {
+                              flowDisplay = '--';
+                            }
+                            
+                            // 解析个人余额和公司余额
+                            const personalBalance = record['个人余额'] || '0.00 (0%)';
+                            const companyBalance = record['公司余额'] || '0.00 (0%)';
+                            
+                            // 提取金额和百分比
+                            const parseBalanceData = (balanceStr) => {
+                              const match = balanceStr.match(/^([\d.,]+)\s*\(([^)]+)\)$/);
+                              if (match) {
+                                return {
+                                  amount: parseFloat(match[1].replace(/,/g, '')),
+                                  percentage: match[2]
+                                };
                               }
-                            }}>
-                              <TableCell>{record.交易时间}</TableCell>
-                              <TableCell>
-                                {typeof record.入金 === 'number' 
-                                  ? `¥${parseFloat(record.入金).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
-                                  : record.入金}
-                              </TableCell>
-                              <TableCell>
-                                {typeof record.出金 === 'number' 
-                                  ? `¥${parseFloat(record.出金).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
-                                  : record.出金}
-                              </TableCell>
-                              <TableCell>
-                                {typeof record.总余额 === 'number' 
-                                  ? `¥${parseFloat(record.总余额).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` 
-                                  : record.总余额}
-                              </TableCell>
-                              <TableCell>{record.单笔资金占比}</TableCell>
-                              <TableCell>{record.总资金占比}</TableCell>
-                            </TableRow>
-                          ))}
+                              return { amount: 0, percentage: '0%' };
+                            };
+                            
+                            const personalData = parseBalanceData(personalBalance);
+                            const companyData = parseBalanceData(companyBalance);
+                            
+                            return (
+                              <TableRow key={index}>
+                                <TableCell sx={{ textAlign: 'center' }}>{record['交易时间'] || '--'}</TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>{flowDisplay}</TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>¥{parseFloat(record['总余额'] || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>
+                                  <Box>
+                                    <div>¥{personalData.amount.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                                    <div style={{ fontSize: '0.8em', color: '#666' }}>{personalData.percentage}</div>
+                                  </Box>
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>
+                                  <Box>
+                                    <div>¥{companyData.amount.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                                    <div style={{ fontSize: '0.8em', color: '#666' }}>{companyData.percentage}</div>
+                                  </Box>
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>¥{parseFloat(record['累计申购'] || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>¥{parseFloat(record['累计赎回'] || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                                <TableCell sx={{ textAlign: 'center' }}>¥{parseFloat(record['净盈亏'] || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </TableContainer>
                   </Box>
                 )}
                 
-                {fundPoolResult && !fundPoolResult.success && (
-                  <Alert severity="error" sx={{ mt: 2 }}>
+                {fundPoolResult.success && (!fundPoolResult.records || fundPoolResult.records.length === 0) && (
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      {fundPoolResult.pool_name} - 资金池信息
+                    </Typography>
+                    <Alert severity="info">
+                      该资金池在当前时点没有交易记录。
+                    </Alert>
+                  </Box>
+                )}
+                
+                {!fundPoolResult.success && (
+                  <Alert severity="error">
                     {fundPoolResult.message || '资金池查询失败'}
                   </Alert>
                 )}
               </CardContent>
             </Card>
           </Grid>
-        )}
+        </Grid>
+      )}
 
-        {/* 查询日志 */}
+      {/* 第四行：查询日志 */}
+      <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12}>
           <Card>
             <CardContent>

@@ -329,7 +329,7 @@ const AuditPage: React.FC = () => {
             id: AnalysisHistoryManager.generateRecordId(),
             timestamp: new Date(),
             algorithm: algorithm as 'FIFO' | 'BALANCE_METHOD',
-            algorithmDisplayName: AnalysisHistoryManager.formatAlgorithmName(algorithm),
+            algorithmDisplayName: t(`algorithms.${algorithm}`),
             inputFile: {
               name: inputFile.split(/[/\\]/).pop() || '未知文件',
               path: inputFile,

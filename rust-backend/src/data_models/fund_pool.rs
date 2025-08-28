@@ -30,6 +30,14 @@ pub struct FundPoolRecord {
     #[serde(rename = "总余额")]
     pub total_balance: Decimal,
     
+    /// 个人资金余额
+    #[serde(rename = "个人余额")]
+    pub personal_balance: Decimal,
+    
+    /// 公司资金余额
+    #[serde(rename = "公司余额")]
+    pub company_balance: Decimal,
+    
     /// 单笔资金占比
     #[serde(rename = "单笔资金占比")]
     pub single_fund_ratio: String,
@@ -49,6 +57,10 @@ pub struct FundPoolRecord {
     /// 累计赎回
     #[serde(rename = "累计赎回")]
     pub cumulative_redemption: Decimal,
+    
+    /// 净盈亏
+    #[serde(rename = "净盈亏")]
+    pub net_profit_loss: Decimal,
 }
 
 impl FundPoolRecord {
@@ -59,11 +71,14 @@ impl FundPoolRecord {
         inflow: Decimal,
         outflow: Decimal,
         total_balance: Decimal,
+        personal_balance: Decimal,
+        company_balance: Decimal,
         single_fund_ratio: String,
         total_fund_ratio: String,
         behavior_nature: String,
         cumulative_purchase: Decimal,
         cumulative_redemption: Decimal,
+        net_profit_loss: Decimal,
     ) -> Self {
         Self {
             transaction_time,
@@ -71,11 +86,14 @@ impl FundPoolRecord {
             inflow,
             outflow,
             total_balance,
+            personal_balance,
+            company_balance,
             single_fund_ratio,
             total_fund_ratio,
             behavior_nature,
             cumulative_purchase,
             cumulative_redemption,
+            net_profit_loss,
         }
     }
     
@@ -96,7 +114,7 @@ impl FundPoolRecord {
     
     /// 计算盈亏情况
     pub fn calculate_profit_loss(&self) -> Decimal {
-        self.cumulative_redemption - self.cumulative_purchase
+        self.net_profit_loss
     }
 }
 
@@ -310,11 +328,14 @@ mod tests {
             Decimal::from(50000),
             Decimal::ZERO,
             Decimal::from(50000),
+            Decimal::from(50000),  // personal_balance
+            Decimal::ZERO,         // company_balance
             "个人:100.0%".to_string(),
             "个人:100.0%".to_string(),
             "投资申购".to_string(),
             Decimal::from(50000),
             Decimal::ZERO,
+            Decimal::ZERO,         // net_profit_loss
         );
         
         assert!(record.is_purchase());
@@ -332,11 +353,14 @@ mod tests {
             Decimal::from(50000),
             Decimal::ZERO,
             Decimal::from(50000),
+            Decimal::from(50000),  // personal_balance
+            Decimal::ZERO,         // company_balance
             "个人:100.0%".to_string(),
             "个人:100.0%".to_string(),
             "投资申购".to_string(),
             Decimal::from(50000),
             Decimal::ZERO,
+            Decimal::ZERO,         // net_profit_loss
         );
         
         let record2 = FundPoolRecord::new(
@@ -345,11 +369,14 @@ mod tests {
             Decimal::ZERO,
             Decimal::from(55000),
             Decimal::ZERO,
+            Decimal::ZERO,         // personal_balance
+            Decimal::ZERO,         // company_balance
             "个人:100.0%".to_string(),
             "个人:100.0%".to_string(),
             "投资赎回".to_string(),
             Decimal::from(50000),
             Decimal::from(55000),
+            Decimal::from(5000),   // net_profit_loss
         );
         
         manager.add_record(record1);

@@ -36,6 +36,7 @@ import { useAppState } from '../contexts/AppStateContext';
 import { checkSystemEnvironment, SystemEnvStatus } from '../services/systemService';
 import { AppSettings, ThemeMode, Language } from '../types/app';
 import { QueryHistoryStorage, AnalysisHistoryStorage, DataCleanup } from '../utils/storageUtils';
+import { TempFileManager, TempDirectoryStats } from '../utils/tempFileManager';
 import { formatLocalTime } from '../utils/timeUtils';
 import TimeBasedCleanupDialog from '../components/TimeBasedCleanupDialog';
 
@@ -55,6 +56,7 @@ const SettingsPage: React.FC = () => {
   
   const [storageStats, setStorageStats] = useState<{ count: number; lastSaved?: string } | null>(null);
   const [analysisStats, setAnalysisStats] = useState<{ count: number; lastAnalysis?: string; totalSize?: number } | null>(null);
+  const [tempFileStats, setTempFileStats] = useState<TempDirectoryStats | null>(null);
   const [appVersion, setAppVersion] = useState<string>('v2.0.0-Rust-Native');
   const [systemEnv, setSystemEnv] = useState<SystemEnvStatus | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(false);
@@ -62,13 +64,29 @@ const SettingsPage: React.FC = () => {
 
   // 加载存储统计信息
   useEffect(() => {
-    const loadStorageStats = () => {
+    const loadStorageStats = async () => {
       try {
         const queryStats = QueryHistoryStorage.getStats();
         setStorageStats(queryStats);
         
         const analysisStats = AnalysisHistoryStorage.getStats();
         setAnalysisStats(analysisStats);
+        
+        // 加载临时文件统计信息
+        try {
+          const tempStats = await TempFileManager.getTempDirectoryStats();
+          setTempFileStats(tempStats);
+        } catch (error) {
+          console.warn('Failed to load temp file stats:', error);
+          setTempFileStats({
+            totalFiles: 0,
+            totalSize: 0,
+            trackedFiles: 0,
+            untrackedFiles: 0,
+            orphanedFiles: 0,
+            safeToDeleteFiles: 0
+          });
+        }
       } catch (error) {
         console.error('Failed to load storage stats:', error);
       }
@@ -237,11 +255,19 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
     try {
-      DataCleanup.resetAllData();
+      await DataCleanup.resetAllData();
       clearQueryHistory(); // 同步清空时点查询历史
       setAnalysisStats({ count: 0 }); // 更新UI状态
+      setTempFileStats({
+        totalFiles: 0,
+        totalSize: 0,
+        trackedFiles: 0,
+        untrackedFiles: 0,
+        orphanedFiles: 0,
+        safeToDeleteFiles: 0
+      }); // 更新临时文件统计
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
@@ -257,7 +283,59 @@ const SettingsPage: React.FC = () => {
   };
 
 
-  const handleTimeBasedCleanupComplete = (result: { queryDeleted: number; analysisDeleted: number }) => {
+  // 清理孤儿文件和同步历史记录
+  const handleSyncHistoryWithFiles = async () => {
+    try {
+      const result = await TempFileManager.syncHistoryWithFiles();
+      showNotification({
+        type: 'success',
+        title: t('settings.data_management'),
+        message: `同步完成！删除了 ${result.deletedRecords} 条无效历史记录和 ${result.deletedFiles} 个孤儿文件。`,
+      });
+      
+      // 刷新统计信息
+      const queryStats = QueryHistoryStorage.getStats();
+      setStorageStats(queryStats);
+      const analysisStats = AnalysisHistoryStorage.getStats();
+      setAnalysisStats(analysisStats);
+      const tempStats = await TempFileManager.getTempDirectoryStats();
+      setTempFileStats(tempStats);
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        title: t('settings.data_management'),
+        message: `同步失败: ${error}`,
+      });
+    }
+  };
+
+  // 清理可安全删除的临时文件
+  const handleCleanupSafeFiles = async () => {
+    try {
+      const result = await TempFileManager.cleanupSafeFiles();
+      showNotification({
+        type: 'success',
+        title: t('settings.data_management'),
+        message: `清理完成！删除了 ${result.deleted} 个文件。${result.failed > 0 ? `有 ${result.failed} 个文件删除失败。` : ''}`,
+      });
+      
+      if (result.errors.length > 0) {
+        console.warn('清理临时文件时遇到错误:', result.errors);
+      }
+      
+      // 刷新统计信息
+      const tempStats = await TempFileManager.getTempDirectoryStats();
+      setTempFileStats(tempStats);
+    } catch (error) {
+      showNotification({
+        type: 'error',
+        title: t('settings.data_management'),
+        message: `清理失败: ${error}`,
+      });
+    }
+  };
+
+  const handleTimeBasedCleanupComplete = async (result: { queryDeleted: number; analysisDeleted: number }) => {
     showNotification({
       type: 'success',
       title: t('settings.data_management'),
@@ -269,6 +347,8 @@ const SettingsPage: React.FC = () => {
     setStorageStats(queryStats);
     const analysisStats = AnalysisHistoryStorage.getStats();
     setAnalysisStats(analysisStats);
+    const tempStats = await TempFileManager.getTempDirectoryStats();
+    setTempFileStats(tempStats);
   };
 
   return (
@@ -559,6 +639,57 @@ const SettingsPage: React.FC = () => {
                 </Grid>
               </Box>
 
+              {/* 临时文件统计 */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  临时文件管理
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      文件总数
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {tempFileStats?.totalFiles || 0} 个
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      总文件大小
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {tempFileStats?.totalSize ? 
+                        `${(tempFileStats.totalSize / (1024 * 1024)).toFixed(1)} MB` : 
+                        '0 B'
+                      }
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      已跟踪文件
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold" color="success.main">
+                      {tempFileStats?.trackedFiles || 0} 个
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      孤儿文件
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold" color="warning.main">
+                      {tempFileStats?.orphanedFiles || 0} 个
+                    </Typography>
+                  </Grid>
+                  {tempFileStats && tempFileStats.safeToDeleteFiles > 0 && (
+                    <Grid item xs={12}>
+                      <Alert severity="info" variant="outlined">
+                        检测到 {tempFileStats.safeToDeleteFiles} 个可安全删除的文件，建议定期清理以释放存储空间。
+                      </Alert>
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+
               <Divider sx={{ my: 2 }} />
 
               {/* 数据操作 */}
@@ -599,6 +730,24 @@ const SettingsPage: React.FC = () => {
                   </Button>
                   <Button
                     variant="outlined"
+                    color="info"
+                    size="small"
+                    onClick={handleSyncHistoryWithFiles}
+                    disabled={!tempFileStats || (tempFileStats.totalFiles === 0 && (analysisStats?.count || 0) === 0)}
+                  >
+                    同步历史记录
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    size="small"
+                    onClick={handleCleanupSafeFiles}
+                    disabled={!tempFileStats || tempFileStats.safeToDeleteFiles === 0}
+                  >
+                    清理安全文件 ({tempFileStats?.safeToDeleteFiles || 0})
+                  </Button>
+                  <Button
+                    variant="outlined"
                     color="error"
                     size="small"
                     onClick={handleClearAllData}
@@ -608,7 +757,7 @@ const SettingsPage: React.FC = () => {
                 </Box>
               </Box>
 
-              {(queryState.history.length > 0 || (analysisStats?.count || 0) > 0) && (
+              {(queryState.history.length > 0 || (analysisStats?.count || 0) > 0 || (tempFileStats && tempFileStats.totalFiles > 0)) && (
                 <Alert severity="info" sx={{ mt: 2 }}>
                   <Box>
                     {queryState.history.length > 0 && (
@@ -621,12 +770,22 @@ const SettingsPage: React.FC = () => {
                         • 分析历史包含 {analysisStats?.count} 条记录，包括生成的Excel分析报告文件
                       </Typography>
                     )}
+                    {tempFileStats && tempFileStats.totalFiles > 0 && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        • 临时目录包含 {tempFileStats.totalFiles} 个文件，其中 {tempFileStats.orphanedFiles} 个为孤儿文件
+                      </Typography>
+                    )}
                     <Typography variant="body2" color="text.secondary">
-                      系统会根据您设置的最大记录数量（当前: {settings.maxHistoryRecords} 条）自动管理历史记录。使用"按时间清理"功能可以灵活管理历史数据。
+                      系统会根据您设置的最大记录数量（当前: {settings.maxHistoryRecords} 条）自动管理历史记录。使用"同步历史记录"可以清理孤儿文件并确保数据一致性。
                     </Typography>
                     {((storageStats?.count || 0) > settings.maxHistoryRecords || (analysisStats?.count || 0) > settings.maxHistoryRecords) && (
                       <Typography variant="body2" sx={{ mt: 1, color: 'warning.main', fontWeight: 500 }}>
                         ⚠️ 检测到历史记录已超出设定限制，建议使用"按时间清理"功能进行整理
+                      </Typography>
+                    )}
+                    {tempFileStats && tempFileStats.orphanedFiles > 0 && (
+                      <Typography variant="body2" sx={{ mt: 1, color: 'warning.main', fontWeight: 500 }}>
+                        ⚠️ 检测到 {tempFileStats.orphanedFiles} 个孤儿文件，建议使用"同步历史记录"功能进行清理
                       </Typography>
                     )}
                   </Box>

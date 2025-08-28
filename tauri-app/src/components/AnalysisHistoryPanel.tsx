@@ -42,7 +42,6 @@ import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { AnalysisHistoryRecord } from '../types/analysisHistory';
 import { AnalysisHistoryManager } from '../utils/analysisHistoryManager';
-import { formatLocalTime } from '../utils/timeUtils';
 
 interface AnalysisHistoryPanelProps {
   /** 是否显示历史记录面板 */
@@ -62,7 +61,21 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
   refreshTrigger = 0
 }) => {
   const theme = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  
+  // 格式化时间显示，支持多语言
+  const formatDisplayTime = (date: Date) => {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+    return date.toLocaleString(locale, {
+      year: 'numeric',
+      month: i18n.language === 'zh' ? 'long' : 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: i18n.language === 'zh' ? false : true
+    });
+  };
   const [records, setRecords] = useState<AnalysisHistoryRecord[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<AnalysisHistoryRecord | null>(null);
@@ -115,26 +128,31 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       if (syncResult.totalUpdated > 0) {
         showNotification?.({
           type: 'success',
-          title: '文件状态已更新',
-          message: `检查了 ${syncResult.totalChecked} 条记录，更新了 ${syncResult.totalUpdated} 条记录的文件状态`
+          title: t('analysis_history.status_updated'),
+          message: t('analysis_history.status_check_completed', { 
+            totalChecked: syncResult.totalChecked, 
+            totalUpdated: syncResult.totalUpdated 
+          })
         });
       } else {
         showNotification?.({
           type: 'info',
-          title: '文件状态正常',
-          message: `检查了 ${syncResult.totalChecked} 条记录，所有文件状态都是最新的`
+          title: t('analysis_history.status_normal'),
+          message: t('analysis_history.all_files_current', { 
+            totalChecked: syncResult.totalChecked 
+          })
         });
       }
       
       if (syncResult.errors.length > 0) {
-        console.warn('文件状态同步过程中出现错误:', syncResult.errors);
+        console.warn('File status sync errors occurred:', syncResult.errors);
       }
     } catch (error) {
-      console.error('手动刷新文件状态失败:', error);
+      console.error('Manual file status refresh failed:', error);
       showNotification?.({
         type: 'error',
-        title: '刷新失败',
-        message: '无法更新文件状态，请稍后重试'
+        title: t('analysis_history.refresh_failed'),
+        message: t('analysis_history.refresh_error')
       });
     } finally {
       setIsRefreshing(false);
@@ -162,29 +180,29 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         if (result.allDeleted) {
           showNotification?.({ 
             type: 'success', 
-            title: '删除成功', 
-            message: '分析记录和所有相关文件已成功删除' 
+            title: t('analysis_history.delete_success'),
+            message: t('analysis_history.delete_success_message')
           });
         } else if (result.partiallyDeleted) {
           showNotification?.({ 
             type: 'warning', 
-            title: '部分删除成功', 
-            message: `部分文件已删除，但有些文件删除失败\uff1a${result.errors.join(', ')}。记录已更新以反映当前状态。` 
+            title: t('analysis_history.partial_delete_success'),
+            message: t('analysis_history.partial_delete_message', { errors: result.errors.join(', ') })
           });
         }
       } else {
         showNotification?.({ 
           type: 'error', 
-          title: '删除失败', 
-          message: `无法删除分析记录：${result.errors.join(', ')}。记录已保留。` 
+          title: t('analysis_history.delete_failed'),
+          message: t('analysis_history.delete_failed_message', { errors: result.errors.join(', ') })
         });
       }
     } catch (error) {
       console.error('删除历史记录出错:', error);
       showNotification?.({ 
         type: 'error', 
-        title: '操作失败', 
-        message: '删除记录时发生意外错误，请稍后重试' 
+        title: t('analysis_history.operation_failed'),
+        message: t('analysis_history.delete_error')
       });
     } finally {
       setOperationLoading(null);
@@ -199,16 +217,16 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       if (!success) {
         showNotification?.({ 
           type: 'error', 
-          title: '打开失败', 
-          message: '无法打开分析结果文件，可能文件不存在或已被移动。' 
+          title: t('analysis_history.open_failed'),
+          message: t('analysis_history.open_main_failed')
         });
       }
     } catch (error) {
       console.error('打开分析结果出错:', error);
       showNotification?.({ 
         type: 'error', 
-        title: '操作失败', 
-        message: '打开文件时发生错误，请检查文件是否存在。' 
+        title: t('analysis_history.operation_failed'),
+        message: t('analysis_history.file_operation_error')
       });
     } finally {
       setOperationLoading(null);
@@ -223,16 +241,16 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       if (!success) {
         showNotification?.({ 
           type: 'error', 
-          title: '打开失败', 
-          message: '无法打开场外资金池记录文件，可能文件不存在或已被移动。' 
+          title: t('analysis_history.open_failed'),
+          message: t('analysis_history.open_pool_failed')
         });
       }
     } catch (error) {
       console.error('打开场外资金池记录出错:', error);
       showNotification?.({ 
         type: 'error', 
-        title: '操作失败', 
-        message: '打开文件时发生错误，请检查文件是否存在。' 
+        title: t('analysis_history.operation_failed'),
+        message: t('analysis_history.file_operation_error')
       });
     } finally {
       setOperationLoading(null);
@@ -246,7 +264,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       const success = await AnalysisHistoryManager.saveAsRecord(record);
       if (!success) {
         // TODO: 显示错误通知 (可能是用户取消了)
-        console.log('另存为操作取消或失败');
+        console.log(t('analysis_history.save_as_failed'));
       }
     } catch (error) {
       console.error('另存为分析结果出错:', error);
@@ -262,7 +280,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         return (
           <Chip
             icon={<CheckCircle />}
-            label="成功"
+            label={t('analysis_history.status.success')}
             color="success"
             size="small"
             variant="outlined"
@@ -272,7 +290,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         return (
           <Chip
             icon={<Error />}
-            label="失败"
+            label={t('analysis_history.status.failed')}
             color="error"
             size="small"
             variant="outlined"
@@ -282,7 +300,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         return (
           <Chip
             icon={<Speed />}
-            label="处理中"
+            label={t('analysis_history.status.processing')}
             color="primary"
             size="small"
             variant="outlined"
@@ -297,9 +315,9 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
   const formatStatistics = (record: AnalysisHistoryRecord) => {
     const stats = record.statistics;
     return [
-      `${stats.totalRecords.toLocaleString()}条记录`,
+      t('analysis_history.stats.records_count', { count: stats.totalRecords.toLocaleString() }),
       `${AnalysisHistoryManager.formatProcessingTime(stats.processingTime)}`,
-      stats.validationFixes > 0 ? `修复${stats.validationFixes}处错误` : null,
+      stats.validationFixes > 0 ? t('analysis_history.stats.validation_fixes', { count: stats.validationFixes }) : null,
     ].filter(Boolean).join(' · ');
   };
 
@@ -324,11 +342,11 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <History />
           <Typography variant="h6">
-            分析历史记录 ({records.length})
+            {t('analysis_history.title')} ({records.length})
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title="刷新文件状态">
+          <Tooltip title={t('analysis_history.refresh_status')}>
             <IconButton 
               size="small" 
               onClick={handleManualRefresh}
@@ -353,7 +371,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         <Box sx={{ mt: 1 }}>
           {records.length === 0 ? (
             <Alert severity="info" sx={{ mt: 1 }}>
-              还没有分析历史记录。完成第一次分析后，记录将显示在这里。
+              {t('analysis_history.no_records')}
             </Alert>
           ) : (
             <Card variant="outlined">
@@ -373,12 +391,12 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                             <Assessment color="primary" fontSize="small" />
                             <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
-                              {record.algorithmDisplayName}
+                              {t(`algorithms.${record.algorithm}`)}
                             </Typography>
                             {getStatusChip(record)}
                           </Box>
                           <Typography variant="body2" color="text.secondary" gutterBottom>
-                            输入文件: {record.inputFile.name} ({AnalysisHistoryManager.formatFileSize(record.inputFile.size)})
+                            {t('analysis_history.file_info.input_file')}: {record.inputFile.name} ({AnalysisHistoryManager.formatFileSize(record.inputFile.size)})
                           </Typography>
                           <Typography 
                             variant="body2" 
@@ -389,11 +407,11 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                               opacity: record.outputFile.deleted ? 0.6 : 1
                             }}
                           >
-                            主分析结果: {record.outputFile.name}
-                            {record.outputFile.deleted && ' [已删除]'}
+                            {t('analysis_history.file_info.main_result')}: {record.outputFile.name}
+                            {record.outputFile.deleted && t('analysis_history.file_info.file_deleted')}
                             {record.outputFile.deleteError && (
                               <span style={{ color: theme.palette.error.main, marginLeft: 8 }}>
-                                [删除失败: {record.outputFile.deleteError}]
+                                {t('analysis_history.file_info.delete_failed', { error: record.outputFile.deleteError })}
                               </span>
                             )}
                           </Typography>
@@ -407,11 +425,11 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                                 opacity: record.offsitePoolFile.deleted ? 0.6 : 1
                               }}
                             >
-                              配套场外资金池记录: {record.offsitePoolFile.name}
-                              {record.offsitePoolFile.deleted && ' [已删除]'}
+                              {t('analysis_history.file_info.pool_record')}: {record.offsitePoolFile.name}
+                              {record.offsitePoolFile.deleted && t('analysis_history.file_info.file_deleted')}
                               {record.offsitePoolFile.deleteError && (
                                 <span style={{ color: theme.palette.error.main, marginLeft: 8 }}>
-                                  [删除失败: {record.offsitePoolFile.deleteError}]
+                                  {t('analysis_history.file_info.delete_failed', { error: record.offsitePoolFile.deleteError })}
                                 </span>
                               )}
                             </Typography>
@@ -420,7 +438,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                             {formatStatistics(record)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {formatLocalTime(record.timestamp, 'display')}
+                            {formatDisplayTime(record.timestamp)}
                           </Typography>
                         </Box>
 
@@ -428,10 +446,10 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title={
                             record.outputFile.deleted 
-                              ? "文件已删除，无法打开" 
+                              ? t('analysis_history.tooltips.open_main_deleted')
                               : record.outputFile.deleteError 
-                                ? `文件删除失败：${record.outputFile.deleteError}` 
-                                : "打开分析结果"
+                                ? t('analysis_history.tooltips.open_main_error', { error: record.outputFile.deleteError })
+                                : t('analysis_history.tooltips.open_main')
                           }>
                             <span>
                               <IconButton
@@ -449,7 +467,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="另存为">
+                          <Tooltip title={t('analysis_history.tooltips.save_as')}>
                             <IconButton
                               size="small"
                               onClick={() => handleSaveAsRecord(record)}
@@ -461,12 +479,12 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                           {record.offsitePoolFile && (
                             <Tooltip title={
                               !record.offsitePoolFile 
-                                ? "该记录无场外资金池文件"
+                                ? t('analysis_history.file_info.no_pool_file')
                                 : record.offsitePoolFile.deleted 
-                                  ? "场外资金池文件已删除，无法打开" 
+                                  ? t('analysis_history.tooltips.open_pool_deleted')
                                   : record.offsitePoolFile.deleteError 
-                                    ? `场外文件删除失败：${record.offsitePoolFile.deleteError}`
-                                    : "打开场外资金池记录"
+                                    ? t('analysis_history.tooltips.open_pool_error', { error: record.offsitePoolFile.deleteError })
+                                    : t('analysis_history.tooltips.open_pool')
                             }>
                               <span>
                                 <IconButton
@@ -486,7 +504,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
                               </span>
                             </Tooltip>
                           )}
-                          <Tooltip title="删除记录">
+                          <Tooltip title={t('analysis_history.tooltips.delete_record')}>
                             <IconButton
                               size="small"
                               onClick={() => handleDeleteRecord(record)}
@@ -522,52 +540,52 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>删除分析记录</DialogTitle>
+        <DialogTitle>{t('analysis_history.delete_dialog.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            确定要删除这个分析记录吗？系统将尝试删除以下文件：
+            {t('analysis_history.delete_dialog.confirm_message')}
           </DialogContentText>
           {recordToDelete && (
             <Box sx={{ mt: 1, mb: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
-                将被删除的文件：
+                {t('analysis_history.delete_dialog.files_to_delete')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ ml: 2, mb: 0.5 }}>
-                • 主分析结果: {recordToDelete.outputFile.name}
+                • {t('analysis_history.delete_dialog.main_file')}: {recordToDelete.outputFile.name}
               </Typography>
               {recordToDelete.offsitePoolFile && (
                 <Typography variant="body2" color="text.secondary" sx={{ ml: 2, mb: 0.5 }}>
-                  • 场外资金池记录: {recordToDelete.offsitePoolFile.name}
+                  • {t('analysis_history.delete_dialog.pool_file')}: {recordToDelete.offsitePoolFile.name}
                 </Typography>
               )}
             </Box>
           )}
           <DialogContentText sx={{ color: 'warning.main', fontStyle: 'italic' }}>
-            注意：如果部分文件无法删除（如正在被使用），记录将保留并显示删除状态。此操作无法撤销。
+            {t('analysis_history.delete_dialog.warning')}
           </DialogContentText>
           {recordToDelete && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
               <Typography variant="body2" color="text.secondary">
-                <strong>算法:</strong> {recordToDelete.algorithmDisplayName}
+                <strong>{t('analysis_history.delete_dialog.record_info.algorithm')}:</strong> {t(`algorithms.${recordToDelete.algorithm}`)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                <strong>文件:</strong> {recordToDelete.inputFile.name}
+                <strong>{t('analysis_history.delete_dialog.record_info.file')}:</strong> {recordToDelete.inputFile.name}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                <strong>时间:</strong> {formatLocalTime(recordToDelete.timestamp, 'display')}
+                <strong>{t('analysis_history.delete_dialog.record_info.time')}:</strong> {formatDisplayTime(recordToDelete.timestamp)}
               </Typography>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>取消</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)}>{t('analysis_history.delete_dialog.cancel')}</Button>
           <Button
             onClick={confirmDelete}
             color="error"
             variant="contained"
             disabled={operationLoading !== null}
           >
-            删除
+            {t('analysis_history.delete_dialog.confirm')}
           </Button>
         </DialogActions>
       </Dialog>

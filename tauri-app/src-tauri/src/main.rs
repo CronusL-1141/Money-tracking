@@ -16,7 +16,7 @@ use regex::Regex;
 use std::sync::Arc;
 
 // 引入Rust后端库
-use audit_backend::{AuditService, TauriAuditConfig, TimePointService, TimePointQueryRequest, TimePointQueryResult, FundPoolQueryRequest, FundPoolQueryResult};
+use audit_backend::{AuditService, TauriAuditConfig, TimePointService, TimePointQueryRequest, TimePointQueryResult};
 
 // 引入模块化命令
 mod commands;
@@ -149,6 +149,8 @@ pub struct AppState {
     pub current_process: Mutex<ProcessStatus>,
     pub app_config: Mutex<AppConfig>,
     pub audit_service: Arc<AuditService>,  // 添加Rust后端服务
+    pub last_full_query: Mutex<Option<(String, String)>>, // (file_path, algorithm) 用于缓存判定
+    pub time_point_service: Mutex<Option<audit_backend::services::TimePointService>>, // 时点查询服务（支持缓存）
 }
 
 // Tauri命令：获取可用算法列表
@@ -633,6 +635,8 @@ fn create_app_state() -> AppState {
         }),
         app_config: Mutex::new(create_default_config()),
         audit_service: Arc::new(AuditService::new()),  // 添加Rust审计服务
+        last_full_query: Mutex::new(None), // 初始化缓存状态
+        time_point_service: Mutex::new(None), // 时点查询服务延迟初始化
     }
 }
 
@@ -796,6 +800,41 @@ async fn open_file(file_path: String) -> Result<(), String> {
     }
 }
 
+/// 获取文件统计信息
+#[tauri::command]
+async fn get_file_stats(file_path: String) -> Result<serde_json::Value, String> {
+    use std::fs;
+    use serde_json::json;
+    
+    match fs::metadata(&file_path) {
+        Ok(metadata) => {
+            let modified = metadata.modified()
+                .map(|time| time.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())
+                .unwrap_or(0);
+                
+            Ok(json!({
+                "size": metadata.len(),
+                "modified": modified * 1000, // 转换为毫秒
+                "is_dir": metadata.is_dir(),
+                "is_file": metadata.is_file()
+            }))
+        }
+        Err(e) => Err(format!("无法获取文件信息: {}", e))
+    }
+}
+
+/// 获取应用目录路径
+#[tauri::command]
+async fn get_app_directory() -> Result<String, String> {
+    use std::env;
+    
+    // 获取当前工作目录
+    match env::current_dir() {
+        Ok(dir) => Ok(dir.to_string_lossy().to_string()),
+        Err(e) => Err(format!("无法获取应用目录: {}", e))
+    }
+}
+
 fn main() {
     // 初始化日志
     env_logger::init();
@@ -812,6 +851,8 @@ fn main() {
             run_audit,
             run_rust_audit,  // 新增Rust后端命令
             commands::time_point_query_rust,
+            commands::clear_query_cache,
+            commands::export_fund_pools_excel,  // 新增Excel导出命令
             check_system_env,
             get_query_history,
             clear_query_history,
@@ -825,8 +866,9 @@ fn main() {
             export_query_result,
             validate_file_path,
             set_window_dark_mode,
-            commands::query_fund_pool,
-            open_file  // 新增打开文件命令
+            open_file,  // 新增打开文件命令
+            get_file_stats,
+            get_app_directory
         ])
         .setup(|app| {
             info!("Application setup completed");

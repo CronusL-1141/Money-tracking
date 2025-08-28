@@ -511,14 +511,28 @@ export class AnalysisHistoryStorage {
 export class DataCleanup {
   /**
    * 完全重置应用数据
-   * 清空所有历史记录和应用设置
+   * 清空所有历史记录、应用设置和临时文件
    */
-  static resetAllData(): boolean {
+  static async resetAllData(): Promise<boolean> {
     try {
+      // 清空本地存储数据
       QueryHistoryStorage.clear();
       AnalysisHistoryStorage.clear();
       storage.remove(STORAGE_KEYS.USER_SETTINGS);
       storage.remove(STORAGE_KEYS.APP_VERSION);
+      
+      // 清空所有临时文件（异步操作）
+      try {
+        const { TempFileManager } = await import('./tempFileManager');
+        const result = await TempFileManager.cleanupAllTempFiles();
+        console.log(`Cleaned up ${result.deleted} temp files, ${result.failed} failed`);
+        if (result.errors.length > 0) {
+          console.warn('Some temp files could not be deleted:', result.errors);
+        }
+      } catch (error) {
+        console.warn('Failed to cleanup temp files during reset:', error);
+      }
+      
       console.log('All application data has been reset');
       return true;
     } catch (error) {

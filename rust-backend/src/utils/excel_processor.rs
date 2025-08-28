@@ -564,51 +564,156 @@ impl ExcelProcessor {
         // let header_format = Format::new().set_bold();
         // let number_format = Format::new();
         
-        // 写入表头
+        // 写入表头（12个字段，与场外资金池记录格式一致）
         let headers = [
             "交易时间", "资金池名称", "入金", "出金", "总余额",
-            "单笔资金占比", "总资金占比", "行为性质", "累计申购", "累计赎回"
+            "个人余额", "公司余额", "资金占比", "行为性质", "累计申购", "累计赎回", "净盈亏"
         ];
         
         for (col, header) in headers.iter().enumerate() {
             worksheet.write_string(0, col as u16, *header)?;
         }
         
-        // 写入数据
-        for (row, record) in records.iter().enumerate() {
-            let row = (row + 1) as u32;
+        // 按资金池分组并按时间排序
+        use std::collections::HashMap;
+        let mut grouped_records: HashMap<String, Vec<&FundPoolRecord>> = HashMap::new();
+        
+        for record in records {
+            grouped_records.entry(record.pool_name.clone())
+                           .or_insert_with(Vec::new)
+                           .push(record);
+        }
+        
+        // 对每个资金池内的记录按交易时间排序
+        for pool_records in grouped_records.values_mut() {
+            pool_records.sort_by(|a, b| a.transaction_time.cmp(&b.transaction_time));
+        }
+        
+        let mut sorted_pools: Vec<_> = grouped_records.keys().collect();
+        sorted_pools.sort();
+        
+        let mut current_row = 1u32;
+        
+        // 按分组写入数据
+        for pool_name in sorted_pools {
+            let pool_records = &grouped_records[pool_name];
             
-            worksheet.write_string(row, 0, &record.transaction_time)?;
+            // 写入该资金池的所有记录（12个字段）
+            for record in pool_records {
+                worksheet.write_string(current_row, 0, &record.transaction_time)?;
+                worksheet.write_string(current_row, 1, &record.pool_name)?;
+                worksheet.write_number(current_row, 2, record.inflow.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 3, record.outflow.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 4, record.total_balance.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 5, record.personal_balance.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 6, record.company_balance.to_f64().unwrap_or(0.0))?;
+                worksheet.write_string(current_row, 7, &record.single_fund_ratio)?; // 资金占比
+                worksheet.write_string(current_row, 8, &record.behavior_nature)?;
+                worksheet.write_number(current_row, 9, record.cumulative_purchase.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 10, record.cumulative_redemption.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 11, record.net_profit_loss.to_f64().unwrap_or(0.0))?;
+                current_row += 1;
+            }
             
-            worksheet.write_string(row, 1, &record.pool_name)?;
+            // 添加总计行（参考场外资金池的实现）
+            if let Some(last_record) = pool_records.last() {
+                let total_purchase = last_record.cumulative_purchase;
+                let total_redemption = last_record.cumulative_redemption;
+                let final_balance = last_record.total_balance;
+                let profit_loss = last_record.net_profit_loss;
+                let status = if profit_loss > rust_decimal::Decimal::ZERO {
+                    "盈利"
+                } else if profit_loss < rust_decimal::Decimal::ZERO {
+                    "亏损"
+                } else {
+                    "持平"
+                };
+                
+                // 计算个人、公司盈亏金额（参考场外资金池逻辑）
+                let (cumulative_personal_profit_loss, cumulative_company_profit_loss) = if profit_loss != rust_decimal::Decimal::ZERO {
+                    // 计算个人、公司占比（从最后一条记录获取）
+                    let personal_ratio = if last_record.total_balance != rust_decimal::Decimal::ZERO {
+                        last_record.personal_balance / last_record.total_balance
+                    } else {
+                        rust_decimal::Decimal::new(5, 1) // 默认50%
+                    };
+                    let company_ratio = rust_decimal::Decimal::ONE - personal_ratio;
+                    
+                    // 分配盈亏到个人和公司
+                    let total_abs = profit_loss.abs();
+                    let personal_share = total_abs * personal_ratio;
+                    let company_share = total_abs * company_ratio;
+                    
+                    (personal_share, company_share)
+                } else {
+                    (rust_decimal::Decimal::ZERO, rust_decimal::Decimal::ZERO)
+                };
+                
+                // 总计行（12个字段，与场外资金池格式一致）
+                worksheet.write_string(current_row, 0, "── 总计 ──")?;
+                worksheet.write_string(current_row, 1, &format!("{} 汇总", pool_name))?;
+                worksheet.write_string(current_row, 2, &format!("总申购: ¥{:.0}", total_purchase))?;
+                worksheet.write_string(current_row, 3, &format!("总赎回: ¥{:.0}", total_redemption))?;
+                worksheet.write_string(current_row, 4, &format!("最终余额: ¥{:.0}", final_balance))?;
+                worksheet.write_string(current_row, 5, &format!("个人{}: ¥{:.0}", status, cumulative_personal_profit_loss))?;
+                worksheet.write_string(current_row, 6, &format!("公司{}: ¥{:.0}", status, cumulative_company_profit_loss))?;
+                worksheet.write_string(current_row, 7, &format!("净盈亏: ¥{:.0}", profit_loss))?;
+                worksheet.write_string(current_row, 8, &format!("状态: {}", status))?;
+                worksheet.write_number(current_row, 9, total_purchase.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 10, total_redemption.to_f64().unwrap_or(0.0))?;
+                worksheet.write_number(current_row, 11, profit_loss.to_f64().unwrap_or(0.0))?;
+                current_row += 1;
+                
+                // 添加空白行分隔（参考场外资金池的做法）
+                for col in 0..12 {
+                    worksheet.write_string(current_row, col, "")?;
+                }
+                current_row += 1;
+            }
+        }
+        
+        // 添加全局总计行
+        if !records.is_empty() {
+            let mut pool_final_values: HashMap<String, &FundPoolRecord> = HashMap::new();
             
-            worksheet.write_number(row, 2, record.inflow.to_f64().unwrap_or(0.0))?;
+            // 为每个资金池找到最后一条记录（最终状态）
+            for record in records {
+                match pool_final_values.entry(record.pool_name.clone()) {
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(record);
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        // 比较交易时间，保留最新的记录
+                        if record.transaction_time > e.get().transaction_time {
+                            e.insert(record);
+                        }
+                    }
+                }
+            }
             
-            worksheet.write_number(row, 3, record.outflow.to_f64().unwrap_or(0.0))?;
+            // 计算全局总计（基于每个资金池的最终状态）
+            let global_total_balance: rust_decimal::Decimal = pool_final_values.values().map(|r| r.total_balance).sum();
+            let global_total_purchase: rust_decimal::Decimal = pool_final_values.values().map(|r| r.cumulative_purchase).sum();
+            let global_total_redemption: rust_decimal::Decimal = pool_final_values.values().map(|r| r.cumulative_redemption).sum();
+            let global_net_profit_loss = global_total_redemption - global_total_purchase;
             
-            worksheet.write_number(row, 4, record.total_balance.to_f64().unwrap_or(0.0))
-                .map_err(|e| AuditError::excel_error(format!("写入总余额失败: {}", e)))?;
-            
-            worksheet.write_string(row, 5, &record.single_fund_ratio)
-                .map_err(|e| AuditError::excel_error(format!("写入单笔占比失败: {}", e)))?;
-            
-            worksheet.write_string(row, 6, &record.total_fund_ratio)
-                .map_err(|e| AuditError::excel_error(format!("写入总占比失败: {}", e)))?;
-            
-            worksheet.write_string(row, 7, &record.behavior_nature)
-                .map_err(|e| AuditError::excel_error(format!("写入行为性质失败: {}", e)))?;
-            
-            worksheet.write_number(row, 8, record.cumulative_purchase.to_f64().unwrap_or(0.0))
-                .map_err(|e| AuditError::excel_error(format!("写入累计申购失败: {}", e)))?;
-            
-            worksheet.write_number(row, 9, record.cumulative_redemption.to_f64().unwrap_or(0.0))
-                .map_err(|e| AuditError::excel_error(format!("写入累计赎回失败: {}", e)))?;
+            worksheet.write_string(current_row, 0, "═════ 全局总计 ═════")?;
+            worksheet.write_string(current_row, 1, &format!("共 {} 个资金池", pool_final_values.len()))?;
+            worksheet.write_string(current_row, 2, "")?;
+            worksheet.write_string(current_row, 3, "")?;
+            worksheet.write_number(current_row, 4, global_total_balance.to_f64().unwrap_or(0.0))?;
+            worksheet.write_string(current_row, 5, &format!("总余额: ¥{:.2}", global_total_balance.to_f64().unwrap_or(0.0)))?;
+            worksheet.write_string(current_row, 6, &format!("净盈亏: ¥{:.2}", global_net_profit_loss.to_f64().unwrap_or(0.0)))?;
+            worksheet.write_string(current_row, 7, "全局汇总")?;
+            worksheet.write_number(current_row, 8, global_total_purchase.to_f64().unwrap_or(0.0))?;
+            worksheet.write_number(current_row, 9, global_total_redemption.to_f64().unwrap_or(0.0))?;
         }
         
         workbook.save(path)
             .map_err(|e| AuditError::excel_error(format!("保存资金池记录失败: {}", e)))?;
         
-        info!("✅ 资金池记录导出完成，共 {} 条记录", records.len());
+        let pool_count = grouped_records.len();
+        info!("✅ 资金池记录导出完成，共 {} 条记录，按 {} 个资金池分组，已为每个池添加总计行", records.len(), pool_count);
         Ok(())
     }
     

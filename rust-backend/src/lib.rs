@@ -43,6 +43,9 @@ pub use data_models::*;
 pub use errors::*;
 pub use utils::*;
 
+// 重新导出常用的外部依赖
+pub use rust_decimal;
+
 /// 库版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

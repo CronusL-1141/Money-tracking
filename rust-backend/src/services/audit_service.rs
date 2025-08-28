@@ -529,6 +529,17 @@ impl AuditService {
         }
     }
     
+    /// 获取场外资金池记录
+    pub fn get_offsite_pool_records(&self) -> OffsitePoolRecordManager {
+        if let Ok(records) = self.offsite_pool_records.lock() {
+            if let Some(ref record_manager) = *records {
+                return record_manager.clone();
+            }
+        }
+        // 如果没有记录，返回空的管理器
+        OffsitePoolRecordManager::new()
+    }
+    
     /// 存储投资池数据（用于完整统计计算）
     fn store_investment_pools_data(&self, investment_pools: &std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool>) {
         info!("💾 存储投资池数据: {} 个池", investment_pools.len());

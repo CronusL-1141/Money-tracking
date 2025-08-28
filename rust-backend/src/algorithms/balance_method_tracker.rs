@@ -258,6 +258,11 @@ impl BalanceMethodTracker {
     pub fn get_investment_pools(&self) -> &std::collections::HashMap<String, crate::algorithms::shared::tracker_base::InvestmentPool> {
         &self.base.investment_pools
     }
+    
+    /// 获取base引用（用于访问场外资金池记录）
+    pub fn get_base(&self) -> &TrackerBase {
+        &self.base
+    }
 }
 
 #[cfg(test)]

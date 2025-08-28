@@ -91,7 +91,9 @@
     "fifo": "FIFO Method",
     "fifo_description": "First In First Out tracking method",
     "balance_method": "Balance Method",
-    "balance_method_description": "Balance-based fund tracking method"
+    "balance_method_description": "Balance-based fund tracking method",
+    "FIFO": "FIFO Method",
+    "BALANCE_METHOD": "Balance Method"
   },
   
   "query": {
@@ -380,5 +382,72 @@
     "data_actions": "Data Actions",
     "app_update": "Application Update",
     "version_info": "Version Info"
+  },
+
+  "analysis_history": {
+    "title": "Analysis History",
+    "no_records": "No analysis history yet. Records will appear here after completing your first analysis.",
+    "refresh_status": "Refresh File Status",
+    "status_updated": "File Status Updated",
+    "status_check_completed": "Checked {{totalChecked}} records, updated {{totalUpdated}} file status entries",
+    "status_normal": "File Status Normal",
+    "all_files_current": "Checked {{totalChecked}} records, all file statuses are up to date",
+    "refresh_failed": "Refresh Failed",
+    "refresh_error": "Unable to update file status, please try again later",
+    "delete_success": "Delete Successful",
+    "delete_success_message": "Analysis record and all related files have been successfully deleted",
+    "partial_delete_success": "Partial Delete Successful",
+    "partial_delete_message": "Some files have been deleted, but some failed to delete: {{errors}}. Record updated to reflect current status.",
+    "delete_failed": "Delete Failed",
+    "delete_failed_message": "Unable to delete analysis record: {{errors}}. Record has been retained.",
+    "operation_failed": "Operation Failed",
+    "delete_error": "Unexpected error occurred while deleting record, please try again later",
+    "open_failed": "Open Failed",
+    "open_main_failed": "Unable to open analysis result file, file may not exist or has been moved.",
+    "open_pool_failed": "Unable to open offsite pool record file, file may not exist or has been moved.",
+    "file_operation_error": "Error occurred while opening file, please check if file exists.",
+    "save_as_failed": "Save As operation was cancelled or failed",
+    "status": {
+      "success": "Success",
+      "failed": "Failed",
+      "processing": "Processing"
+    },
+    "stats": {
+      "records_count": "{{count}} records",
+      "validation_fixes": "Fixed {{count}} errors"
+    },
+    "file_info": {
+      "input_file": "Input File",
+      "main_result": "Main Analysis Result",
+      "pool_record": "Corresponding Offsite Pool Record",
+      "file_deleted": "[Deleted]",
+      "delete_failed": "[Delete Failed: {{error}}]",
+      "no_pool_file": "No offsite pool file for this record"
+    },
+    "tooltips": {
+      "open_main": "Open Analysis Result",
+      "open_main_deleted": "File deleted, cannot open",
+      "open_main_error": "File delete failed: {{error}}",
+      "open_pool": "Open Offsite Pool Record",
+      "open_pool_deleted": "Offsite pool file deleted, cannot open",
+      "open_pool_error": "Offsite file delete failed: {{error}}",
+      "save_as": "Save As",
+      "delete_record": "Delete Record"
+    },
+    "delete_dialog": {
+      "title": "Delete Analysis Record",
+      "confirm_message": "Are you sure you want to delete this analysis record? The system will attempt to delete the following files:",
+      "files_to_delete": "Files to be deleted:",
+      "main_file": "Main Analysis Result",
+      "pool_file": "Offsite Pool Record",
+      "warning": "Note: If some files cannot be deleted (e.g., being used), the record will be retained and show deletion status. This operation cannot be undone.",
+      "record_info": {
+        "algorithm": "Algorithm",
+        "file": "File",
+        "time": "Time"
+      },
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    }
   }
 }

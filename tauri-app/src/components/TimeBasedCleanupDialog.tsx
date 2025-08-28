@@ -275,7 +275,7 @@ const TimeBasedCleanupDialog: React.FC<TimeBasedCleanupDialogProps> = ({
         })),
         analysisHistory: analysisRecords.map(record => ({
           id: record.id,
-          algorithm: record.algorithmDisplayName,
+          algorithm: t(`algorithms.${record.algorithm}`),
           inputFileName: record.inputFile.name,
           outputFileName: record.outputFile.name,
           timestamp: record.timestamp,
@@ -511,7 +511,7 @@ ${errors.length > 0 ? `- 导出失败：${errors.length} 个文件\n\n失败文�
                                   {record.inputFile.name}
                                 </Typography>
                                 <Chip 
-                                  label={record.algorithmDisplayName} 
+                                  label={t(`algorithms.${record.algorithm}`)} 
                                   size="small" 
                                   color="primary" 
                                 />
