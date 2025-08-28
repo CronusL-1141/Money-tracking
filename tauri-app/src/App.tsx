@@ -116,8 +116,8 @@ const App: React.FC = () => {
           </Box>
           {envStatus && (
             <Box sx={{ mt: 2, fontSize: '0.8rem', color: 'text.secondary' }}>
-              {t('settings_labels.python_path')}: {envStatus.python_path?.toString() || 'N/A'}<br/>
-              {t('settings_labels.project_root')}: {envStatus.project_root?.toString() || 'N/A'}
+              {t('settings_labels.work_directory')}: {envStatus.work_directory || 'N/A'}<br/>
+              {t('settings_labels.backend_engine')}: {envStatus.backend_engine || 'N/A'}
             </Box>
           )}
         </Alert>

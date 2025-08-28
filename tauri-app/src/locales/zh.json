@@ -44,6 +44,7 @@
   "app": {
     "title": "涉案资金追踪分析系统",
     "subtitle": "专业的资金流向追踪分析工具",
+    "brand_name": "FLUX",
     "version": "版本 {{version}}"
   },
   
@@ -88,7 +89,65 @@
     "timestamp": "时间戳",
     "balance_status": "余额状态",
     "transaction_info": "交易信息",
-    "cumulative_stats": "累计统计"
+    "cumulative_stats": "累计统计",
+    "fund_pools": {
+      "title": "资金池信息",
+      "no_pools_found": "当前时点尚未发现投资产品资金池",
+      "no_pools_hint": "资金池通常出现在申购/赎回等投资产品交易中",
+      "no_query_yet": "请先执行时点查询以获取资金池信息",
+      "no_query_hint": "选择Excel文件并输入行号后点击查询按钮",
+      "active_pools_found": "发现活跃资金池",
+      "pool_count": "{{count}} 个",
+      "pool_type": "资金池类型",
+      "all_types": "全部类型",
+      "subcategory": "子类型",
+      "all_subcategories": "全部子类型",
+      "query_details": "查询详情",
+      "querying": "查询中...",
+      "save_as": "另存为",
+      "detailed_records": "详细交易记录",
+      "record_count": "{{count}}条",
+      "transaction_time": "交易时间",
+      "fund_flow": "资金流向",
+      "total_balance": "总余额",
+      "personal_balance": "个人余额",
+      "company_balance": "公司余额",
+      "cumulative_subscription": "累计申购",
+      "cumulative_redemption": "累计赎回",
+      "net_profit_loss": "净盈亏",
+      "inflow": "入金",
+      "outflow": "出金",
+      "no_records": "该资金池在当前时点没有交易记录。",
+      "query_failed": "资金池查询失败"
+    },
+    "log_messages": {
+      "file_selected": "已选择文件：{{filename}}",
+      "query_started": "开始查询第{{row}}行数据，算法：{{algorithm}}",
+      "query_success": "查询成功 - 处理时间：{{time}}秒",
+      "row_data_retrieved": "获取到第{{row}}行数据，总行数：{{totalRows}}",
+      "query_failed": "查询失败：{{message}}",
+      "query_exception": "查询异常：{{error}}",
+      "history_cleared": "查询历史和日志已清空",
+      "fund_pool_query_start": "获取资金池详情：{{pool}}",
+      "fund_pool_query_success": "资金池{{pool}}查询成功：{{count}}条交易记录",
+      "fund_pool_balance_info": "当前余额：¥{{balance}}，累计入金：¥{{inflow}}",
+      "fund_pool_no_records": "资金池{{pool}}存在但无交易记录",
+      "fund_pool_balance_only": "当前余额：¥{{balance}}",
+      "fund_pool_not_found": "未找到资金池：{{pool}}",
+      "fund_pool_exception": "资金池查询异常：{{error}}",
+      "export_start": "开始导出当前时点全部资金池信息到Excel",
+      "export_success": "当前时点资金池信息已导出到：{{path}}",
+      "export_error": "资金池信息导出异常：{{error}}"
+    },
+    "export": {
+      "title": "另存为Excel文件",
+      "excel_files": "Excel文件",
+      "success_title": "导出成功",
+      "success_message": "当前时点资金池信息已导出到：{{path}}",
+      "failed_title": "导出失败",
+      "failed_message": "没有可导出的资金池数据",
+      "exception_title": "导出异常"
+    }
   },
   
   "settings": {
@@ -117,7 +176,107 @@
     "history_count": "历史记录数量",
     "last_query_time": "最后查询时间",
     "storage_size": "存储大小",
-    "data_actions": "数据操作"
+    "data_actions": "数据操作",
+    "system_architecture": {
+      "title": "系统架构",
+      "status_normal": "系统状态: 运行正常",
+      "description": "高性能资金追踪分析系统，支持大规模数据处理和实时分析。",
+      "processing_capability": "处理能力",
+      "processing_capability_desc": "支持万级以上交易记录快速分析",
+      "analysis_algorithms": "分析算法",
+      "analysis_algorithms_desc": "FIFO算法和差额计算法双引擎支持",
+      "result_output": "结果输出",
+      "result_output_desc": "Excel格式专业报告，支持历史记录管理"
+    },
+    "system_environment": {
+      "title": "系统环境检查",
+      "checking": "检查中...",
+      "check_environment": "检查环境",
+      "status_normal": "正常",
+      "status_error": "异常",
+      "environment_status": "环境状态",
+      "backend_engine": "后端引擎",
+      "dev_mode_hint": "💡 当前运行在开发模式下，环境检查已放宽要求",
+      "file_system_access": "文件系统访问",
+      "temp_directory_access": "临时目录访问",
+      "work_directory_writable": "工作目录写入",
+      "system_info": "系统信息",
+      "click_check_hint": "点击\"检查环境\"按钮验证系统运行环境。",
+      "check_success": "系统环境检查",
+      "check_success_message": "系统运行正常，{{backend_engine}} {{backend_version}} 就绪。",
+      "check_error": "系统环境检查",
+      "check_error_message": "系统环境存在问题，可能影响正常使用。",
+      "check_failed": "环境检查失败",
+      "check_failed_message": "无法完成系统环境检查: {{error}}"
+    },
+    "analysis_history": {
+      "title": "资金分析历史",
+      "record_count": "分析记录数量",
+      "last_analysis_time": "最近分析时间",
+      "output_file_size": "输出文件总大小"
+    },
+    "temp_file_management": {
+      "title": "临时文件管理",
+      "total_files": "文件总数",
+      "total_file_size": "总文件大小",
+      "tracked_files": "已跟踪文件",
+      "orphaned_files": "孤儿文件",
+      "safe_cleanup_hint": "检测到 {{count}} 个可安全删除的文件，建议定期清理以释放存储空间。"
+    },
+    "data_actions_buttons": {
+      "clear_query_history": "清空时点查询历史",
+      "clear_analysis_history": "清空分析历史",
+      "time_based_cleanup": "按时间清理",
+      "sync_history_records": "同步历史记录",
+      "cleanup_safe_files": "清理安全文件"
+    },
+    "version_info": {
+      "title": "版本信息",
+      "current_version": "当前版本",
+      "version_message": "当前为独立安装包版本，包含所有运行依赖，无需额外环境配置。"
+    },
+    "data_notifications": {
+      "query_history_cleared": "时点查询历史已清空",
+      "analysis_history_cleared": "分析历史记录已清空",
+      "sync_completed": "同步完成！删除了 {{deletedRecords}} 条无效历史记录和 {{deletedFiles}} 个孤儿文件。",
+      "sync_failed": "同步失败: {{error}}",
+      "cleanup_completed": "清理完成！删除了 {{deleted}} 个文件。{{failedMessage}}",
+      "cleanup_failed_suffix": "有 {{failed}} 个文件删除失败。",
+      "cleanup_failed": "清理失败: {{error}}",
+      "time_cleanup_completed": "时间清理完成！删除了 {{queryDeleted}} 条查询记录和 {{analysisDeleted}} 条分析记录。"
+    },
+    "data_management_details": {
+      "auto_management_desc": "系统会根据您设置的最大记录数量（当前: {{count}} 条）自动管理历史记录。使用\"同步历史记录\"可以清理孤儿文件并确保数据一致性。",
+      "history_limit_warning": "⚠️ 检测到历史记录已超出设定限制，建议使用\"按时间清理\"功能进行整理",
+      "orphan_files_warning": "⚠️ 检测到 {{count}} 个孤儿文件，建议使用\"同步历史记录\"功能进行清理",
+      "safe_cleanup_hint": "检测到 {{count}} 个可安全删除的文件，建议定期清理以释放存储空间。",
+      "query_history_status": "• 时点查询历史包含 {{count}} 条记录，软件重启后仍会保留",
+      "analysis_history_status": "• 分析历史包含 {{count}} 条记录，包括生成的Excel分析报告文件",
+      "temp_files_status": "• 临时目录包含 {{totalFiles}} 个文件，其中 {{orphanedFiles}} 个为孤儿文件"
+    },
+    "data_management_labels": {
+      "analysis_history_title": "资金分析历史",
+      "analysis_record_count": "分析记录数量",
+      "last_analysis_time": "最近分析时间",
+      "output_file_size": "输出文件总大小",
+      "temp_file_management": "临时文件管理",
+      "total_files": "文件总数",
+      "total_file_size": "总文件大小", 
+      "tracked_files": "已跟踪文件",
+      "orphaned_files": "孤儿文件",
+      "count_unit": "条",
+      "file_unit": "个"
+    },
+    "legacy_version_info": {
+      "dev_version_desc": "开发模式版本，用于测试和调试。正式发布版本将打包为独立安装包。",
+      "standalone_version_desc": "独立安装包版本，内置Rust高性能引擎，无需Python环境，一键安装即可使用。",
+      "software_type": "软件类型",
+      "software_type_desc": "独立桌面应用程序，免安装依赖",
+      "update_method": "更新方式",
+      "update_method_desc": "通过安装新版本安装包进行更新",
+      "technical_advantage": "技术优势",
+      "technical_advantage_desc": "Rust原生实现，处理速度比Python版本提升3-5倍"
+    }
   },
   
   "results": {
@@ -316,7 +475,8 @@
       "company_balance": "公司余额",
       "total_balance": "总余额",
       "cumulative_misappropriation": "累计挪用",
-      "funding_gap": "资金缺口"
+      "funding_gap": "资金缺口",
+      "net_flow": "净流量"
     },
     "data": {
       "transaction_data_row": "交易数据 (第{{row}}行)",
@@ -379,7 +539,9 @@
     "python_not_available": "Python环境不可用",
     "click_check_env_hint": "点击检查环境按钮来验证Python配置",
     "app_update": "应用更新",
-    "version_info": "版本信息"
+    "version_info": "版本信息",
+    "check_failed_state": "检查失败",
+    "unknown_state": "未知"
   },
 
   "analysis_history": {

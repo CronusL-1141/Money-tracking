@@ -1,0 +1,23 @@
+  <Configuration>
+    <VGpu>Default</VGpu>
+    <Networking>Enable</Networking>
+    <MappedFolders>
+      <!-- 安装包目录 -->
+      <MappedFolder>
+        <HostFolder>C:\Users\TUF\Desktop\资金追踪\tauri-app\src-tauri\target\release\bundle</HostFolder>
+        <SandboxFolder>C:\TestInstallers</SandboxFolder>
+        <ReadOnly>true</ReadOnly>
+      </MappedFolder>
+      <!-- 测试数据目录 -->
+      <MappedFolder>
+        <HostFolder>C:\Users\TUF\Desktop\资金追踪</HostFolder>
+        <SandboxFolder>C:\TestData</SandboxFolder>
+        <ReadOnly>true</ReadOnly>
+      </MappedFolder>
+    </MappedFolders>
+    <LogonCommand>
+      <Command>powershell -Command "Write-Host '🧪 FLUX Analysis System 测试环境已启动' -ForegroundColor Green; Write-Host '📦
+  安装包位置: C:\TestInstallers' -ForegroundColor Blue; Write-Host '📊 测试数据: C:\TestData\流水.xlsx' -ForegroundColor Blue;
+  Read-Host '按回车键继续'"</Command>
+    </LogonCommand>
+  </Configuration>

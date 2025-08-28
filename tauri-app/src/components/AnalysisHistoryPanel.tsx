@@ -40,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
+import { useNotification } from '../contexts/NotificationContext';
 import { AnalysisHistoryRecord } from '../types/analysisHistory';
 import { AnalysisHistoryManager } from '../utils/analysisHistoryManager';
 
@@ -62,6 +63,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
 }) => {
   const theme = useTheme();
   const { t, i18n } = useTranslation();
+  const { showNotification } = useNotification();
   
   // 格式化时间显示，支持多语言
   const formatDisplayTime = (date: Date) => {
@@ -126,7 +128,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       
       // 显示刷新结果通知
       if (syncResult.totalUpdated > 0) {
-        showNotification?.({
+        showNotification({
           type: 'success',
           title: t('analysis_history.status_updated'),
           message: t('analysis_history.status_check_completed', { 
@@ -135,7 +137,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
           })
         });
       } else {
-        showNotification?.({
+        showNotification({
           type: 'info',
           title: t('analysis_history.status_normal'),
           message: t('analysis_history.all_files_current', { 
@@ -149,7 +151,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       }
     } catch (error) {
       console.error('Manual file status refresh failed:', error);
-      showNotification?.({
+      showNotification({
         type: 'error',
         title: t('analysis_history.refresh_failed'),
         message: t('analysis_history.refresh_error')
@@ -178,20 +180,20 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
         setRecordToDelete(null);
         
         if (result.allDeleted) {
-          showNotification?.({ 
+          showNotification({ 
             type: 'success', 
             title: t('analysis_history.delete_success'),
             message: t('analysis_history.delete_success_message')
           });
         } else if (result.partiallyDeleted) {
-          showNotification?.({ 
+          showNotification({ 
             type: 'warning', 
             title: t('analysis_history.partial_delete_success'),
             message: t('analysis_history.partial_delete_message', { errors: result.errors.join(', ') })
           });
         }
       } else {
-        showNotification?.({ 
+        showNotification({ 
           type: 'error', 
           title: t('analysis_history.delete_failed'),
           message: t('analysis_history.delete_failed_message', { errors: result.errors.join(', ') })
@@ -199,7 +201,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       }
     } catch (error) {
       console.error('删除历史记录出错:', error);
-      showNotification?.({ 
+      showNotification({ 
         type: 'error', 
         title: t('analysis_history.operation_failed'),
         message: t('analysis_history.delete_error')
@@ -215,7 +217,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
     try {
       const success = await AnalysisHistoryManager.openRecord(record);
       if (!success) {
-        showNotification?.({ 
+        showNotification({ 
           type: 'error', 
           title: t('analysis_history.open_failed'),
           message: t('analysis_history.open_main_failed')
@@ -223,7 +225,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       }
     } catch (error) {
       console.error('打开分析结果出错:', error);
-      showNotification?.({ 
+      showNotification({ 
         type: 'error', 
         title: t('analysis_history.operation_failed'),
         message: t('analysis_history.file_operation_error')
@@ -239,7 +241,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
     try {
       const success = await AnalysisHistoryManager.openOffsitePoolRecord(record);
       if (!success) {
-        showNotification?.({ 
+        showNotification({ 
           type: 'error', 
           title: t('analysis_history.open_failed'),
           message: t('analysis_history.open_pool_failed')
@@ -247,7 +249,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
       }
     } catch (error) {
       console.error('打开场外资金池记录出错:', error);
-      showNotification?.({ 
+      showNotification({ 
         type: 'error', 
         title: t('analysis_history.operation_failed'),
         message: t('analysis_history.file_operation_error')
@@ -315,7 +317,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
   const formatStatistics = (record: AnalysisHistoryRecord) => {
     const stats = record.statistics;
     return [
-      t('analysis_history.stats.records_count', { count: stats.totalRecords.toLocaleString() }),
+      t('analysis_history.stats.records_count', { count: stats.totalRecords }),
       `${AnalysisHistoryManager.formatProcessingTime(stats.processingTime)}`,
       stats.validationFixes > 0 ? t('analysis_history.stats.validation_fixes', { count: stats.validationFixes }) : null,
     ].filter(Boolean).join(' · ');
@@ -519,7 +521,7 @@ export const AnalysisHistoryPanel: React.FC<AnalysisHistoryPanelProps> = ({
 
                       {/* 错误信息（如果有） */}
                       {record.status === 'failed' && record.error && (
-                        <Alert severity="error" size="small" sx={{ mt: 1 }}>
+                        <Alert severity="error" sx={{ mt: 1, fontSize: '0.875rem' }}>
                           {record.error}
                         </Alert>
                       )}

@@ -319,7 +319,7 @@ const AuditPage: React.FC = () => {
           if (result.output_files.length > 1) {
             const poolFilePath = result.output_files[1];
             offsitePoolFile = {
-              name: poolFilePath.split(/[/\\]/).pop() || '场外资金池记录.xlsx',
+              name: poolFilePath.split(/[/\\]/).pop() || t('file.offsite_pool_record'),
               path: poolFilePath,
               size: 0, // 暂时设为0，后续可以通过文件系统获取
             };
@@ -331,12 +331,12 @@ const AuditPage: React.FC = () => {
             algorithm: algorithm as 'FIFO' | 'BALANCE_METHOD',
             algorithmDisplayName: t(`algorithms.${algorithm}`),
             inputFile: {
-              name: inputFile.split(/[/\\]/).pop() || '未知文件',
+              name: inputFile.split(/[/\\]/).pop() || t('file.unknown_file'),
               path: inputFile,
               size: result.statistics?.input_file_size || 0,
             },
             outputFile: {
-              name: result.output_files[0]?.split(/[/\\]/).pop() || '未知输出文件',
+              name: result.output_files[0]?.split(/[/\\]/).pop() || t('file.unknown_output_file'),
               path: result.output_files[0] || '',
               size: result.statistics?.output_file_size || 0,
             },
@@ -360,8 +360,8 @@ const AuditPage: React.FC = () => {
             setTimeout(() => {
               showNotification({
                 type: 'warning',
-                title: '历史记录提醒',
-                message: '分析历史记录已超出设定限制，建议到设置页面进行清理以保持系统性能。',
+                title: t('notifications.success.history_reminder_title'),
+                message: t('notifications.success.history_reminder_message'),
               });
             }, 2000); // 2秒后显示，避免与成功消息冲突
           }
@@ -631,7 +631,7 @@ const AuditPage: React.FC = () => {
                       minWidth: 60,
                       textAlign: 'right'
                     }}>
-                      {progress > 0 ? `${progress.toFixed(1)}%` : '启动中'}
+                      {progress > 0 ? `${progress.toFixed(1)}%` : t('process_status.starting')}
                     </Typography>
                   </Box>
                 </Box>

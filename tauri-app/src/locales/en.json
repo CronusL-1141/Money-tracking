@@ -44,6 +44,7 @@
   "app": {
     "title": "Case Fund Tracking Analysis System",
     "subtitle": "Professional Fund Flow Tracking Analysis Tool",
+    "brand_name": "FLUX",
     "version": "Version {{version}}"
   },
   
@@ -109,7 +110,66 @@
     "query_history": "Query History",
     "save_result": "Save Result",
     "history": "Query History",
-    "clear_history": "Clear History"
+    "clear_history": "Clear History",
+    "fund_pools": {
+      "title": "Fund Pool Information",
+      "no_pools_found": "No investment product fund pools found at current time point",
+      "no_pools_hint": "Fund pools usually appear in investment product transactions such as subscriptions/redemptions",
+      "no_query_yet": "Please execute time point query first to get fund pool information",
+      "no_query_hint": "Select Excel file and enter row number, then click query button",
+      "active_pools_found": "Active fund pools found",
+      "pool_count": "{{count}} pools",
+      "pool_type": "Fund Pool Type",
+      "all_types": "All Types",
+      "subcategory": "Subcategory",
+      "all_subcategories": "All Subcategories",
+      "other": "Other",
+      "query_details": "Query Details",
+      "querying": "Querying...",
+      "save_as": "Save As",
+      "detailed_records": "Detailed Transaction Records",
+      "record_count": "{{count}} records",
+      "transaction_time": "Transaction Time",
+      "fund_flow": "Fund Flow",
+      "total_balance": "Total Balance",
+      "personal_balance": "Personal Balance",
+      "company_balance": "Company Balance",
+      "cumulative_subscription": "Cumulative Subscription",
+      "cumulative_redemption": "Cumulative Redemption",
+      "net_profit_loss": "Net Profit/Loss",
+      "inflow": "Inflow",
+      "outflow": "Outflow",
+      "no_records": "This fund pool has no transaction records at current time point.",
+      "query_failed": "Fund pool query failed"
+    },
+    "log_messages": {
+      "file_selected": "File selected: {{filename}}",
+      "query_started": "Starting query for row {{row}}, algorithm: {{algorithm}}",
+      "query_success": "Query successful - Processing time: {{time}}s",
+      "row_data_retrieved": "Retrieved row {{row}} data, total rows: {{totalRows}}",
+      "query_failed": "Query failed: {{message}}",
+      "query_exception": "Query exception: {{error}}",
+      "history_cleared": "Query history and logs cleared",
+      "fund_pool_query_start": "Getting fund pool details: {{pool}}",
+      "fund_pool_query_success": "Fund pool {{pool}} query successful: {{count}} transaction records",
+      "fund_pool_balance_info": "Current balance: ¥{{balance}}, cumulative inflow: ¥{{inflow}}",
+      "fund_pool_no_records": "Fund pool {{pool}} exists but has no transaction records",
+      "fund_pool_balance_only": "Current balance: ¥{{balance}}",
+      "fund_pool_not_found": "Fund pool not found: {{pool}}",
+      "fund_pool_exception": "Fund pool query exception: {{error}}",
+      "export_start": "Starting export of current time point all fund pool information to Excel",
+      "export_success": "Current time point fund pool information exported to: {{path}}",
+      "export_error": "Fund pool information export exception: {{error}}"
+    },
+    "export": {
+      "title": "Save as Excel File",
+      "excel_files": "Excel Files",
+      "success_title": "Export Successful",
+      "success_message": "Current time point fund pool information exported to: {{path}}",
+      "failed_title": "Export Failed",
+      "failed_message": "No fund pool data to export",
+      "exception_title": "Export Exception"
+    }
   },
   
   "settings": {
@@ -130,7 +190,101 @@
     "check_environment": "Check Environment",
     "app_update": "Application Update",
     "check_update": "Check for Updates",
-    "current_version": "Current Version"
+    "current_version": "Current Version",
+    "data_management": "Data Management",
+    "query_history": "Query History",
+    "history_count": "History Count",
+    "last_query_time": "Last Query Time",
+    "storage_size": "Storage Size",
+    "data_actions": "Data Actions",
+    "clear_all_data": "Clear All Data",
+    "data_actions_buttons": {
+      "clear_query_history": "Clear Query History",
+      "clear_analysis_history": "Clear Analysis History",
+      "time_based_cleanup": "Time-based Cleanup",
+      "sync_history_records": "Sync History Records",
+      "cleanup_safe_files": "Cleanup Safe Files"
+    },
+    "system_environment": {
+      "title": "System Environment Check",
+      "checking": "Checking...",
+      "check_environment": "Check Environment",
+      "status_normal": "Normal",
+      "status_error": "Error",
+      "environment_status": "Environment Status",
+      "backend_engine": "Backend Engine",
+      "dev_mode_hint": "💡 Currently running in development mode, environment checks have relaxed requirements",
+      "file_system_access": "File System Access",
+      "temp_directory_access": "Temp Directory Access",
+      "work_directory_writable": "Work Directory Writable",
+      "system_info": "System Information",
+      "click_check_hint": "Click \"Check Environment\" button to verify system runtime environment.",
+      "check_error": "System Environment Check",
+      "check_error_message": "System environment has issues that may affect normal operation.",
+      "check_failed": "Environment Check Failed",
+      "check_failed_message": "Unable to complete system environment check: {{error}}",
+      "check_success": "Environment Check Successful",
+      "check_success_message": "System running normally, {{backend_engine}} {{backend_version}} ready.",
+      "backend_names": {
+        "rust_native_dev": "Rust Native Backend (Development Mode)",
+        "rust_native_prod": "Rust Native Backend (Production Mode)",
+        "python_backend": "Python Backend"
+      }
+    },
+    "system_architecture": {
+      "title": "System Architecture",
+      "status_normal": "System Status: Running Normal",
+      "description": "High-performance fund tracking analysis system supporting large-scale data processing and real-time analysis.",
+      "processing_capability": "Processing Capability",
+      "processing_capability_desc": "Supports rapid analysis of 10,000+ transaction records",
+      "analysis_algorithms": "Analysis Algorithms", 
+      "analysis_algorithms_desc": "Dual-engine support for FIFO algorithm and Balance Method",
+      "result_output": "Result Output",
+      "result_output_desc": "Professional Excel format reports with history record management"
+    },
+    "data_management_labels": {
+      "count_unit": "records",
+      "file_unit": "files",
+      "analysis_history_title": "Fund Analysis History",
+      "analysis_record_count": "Analysis Record Count",
+      "last_analysis_time": "Last Analysis Time",
+      "output_file_size": "Output File Total Size",
+      "temp_file_management": "Temp File Management",
+      "total_files": "Total Files",
+      "total_file_size": "Total File Size", 
+      "tracked_files": "Tracked Files",
+      "orphaned_files": "Orphaned Files"
+    },
+    "data_management_details": {
+      "safe_cleanup_hint": "Detected {{count}} files that can be safely deleted, recommend regular cleanup to free storage space.",
+      "history_limit_warning": "History records are approaching limit, recommend regular cleanup to maintain system performance",
+      "query_history_status": "• Query history contains {{count}} records, will be retained after software restart",
+      "analysis_history_status": "• Analysis history contains {{count}} records, including generated Excel analysis report files",
+      "auto_management_desc": "System will automatically manage historical records based on your set maximum record count (current: {{count}} records). Use \"Sync History Records\" to cleanup orphaned files and ensure data consistency.",
+      "orphan_files_warning": "⚠️ Detected {{count}} orphaned files, recommend using \"Sync History Records\" function for cleanup",
+      "temp_files_status": "• Temp directory contains {{totalFiles}} files, of which {{orphanedFiles}} are orphaned files"
+    },
+    "data_notifications": {
+      "query_history_cleared": "Query history has been cleared",
+      "analysis_history_cleared": "Analysis history has been cleared", 
+      "sync_completed": "History sync completed, deleted {{deletedRecords}} records and {{deletedFiles}} files",
+      "time_cleanup_completed": "Time-based cleanup completed, deleted {{queryDeleted}} query records and {{analysisDeleted}} analysis records"
+    },
+    "version_info": {
+      "title": "Version Information",
+      "current_version": "Current Version",
+      "version_message": "System version information has been updated"
+    },
+    "legacy_version_info": {
+      "dev_version_desc": "Development mode version for testing and debugging. Official release version will be packaged as standalone installer.",
+      "standalone_version_desc": "Standalone installer version with built-in Rust high-performance engine, no Python environment needed, one-click installation ready to use.",
+      "software_type": "Software Type",
+      "software_type_desc": "Independent desktop application, installation-free dependencies",
+      "update_method": "Update Method",
+      "update_method_desc": "Update by installing new version installer package",
+      "technical_advantage": "Technical Advantage", 
+      "technical_advantage_desc": "Native Rust implementation, processing speed 3-5x faster than Python version"
+    }
   },
   
   "file": {
@@ -140,7 +294,10 @@
     "file_info": "File Information",
     "file_name": "File Name",
     "file_size": "File Size",
-    "last_modified": "Last Modified"
+    "last_modified": "Last Modified",
+    "unknown_file": "Unknown File",
+    "unknown_output_file": "Unknown Output File",
+    "offsite_pool_record": "Offsite Pool Record.xlsx"
   },
   
   "results": {
@@ -183,7 +340,9 @@
       "analysis_success": "Analysis completed",
       "analysis_completed": "Fund tracking analysis completed, please check results",
       "settings_saved": "Settings saved and applied successfully",
-      "analysis_stopped": "Analysis stopped"
+      "analysis_stopped": "Analysis stopped",
+      "history_reminder_title": "History Record Reminder",
+      "history_reminder_message": "Analysis history records have exceeded the set limit, recommend going to settings page for cleanup to maintain system performance."
     },
     "errors": {
       "file_format_unsupported": "File format not supported",
@@ -350,7 +509,8 @@
     "analyzing": "Analyzing...",
     "completed": "Analysis completed",
     "failed": "Analysis failed",
-    "stopped": "Analysis stopped"
+    "stopped": "Analysis stopped",
+    "starting": "Starting..."
   },
   
   "settings_labels": {
@@ -365,23 +525,93 @@
     "environment_status_normal": "Normal",
     "environment_status_error": "Error",
     "python_path": "Python Path",
-    "current_version": "Current Version",
     "standalone_version_description": "Standalone version, no network updates required. All features are fully available.",
     "python_version": "Python Version",
     "python_env_check": "Python Environment Check",
     "python_available": "Python {{version}} is available",
     "python_not_available": "Python environment is not available",
-    "click_check_env_hint": "Click the check environment button to verify Python configuration",
-    "data_management": "Data Management",
-    "query_history": "Query History",
-    "clear_history": "Clear History", 
-    "clear_all_data": "Clear All Data",
-    "history_count": "History Count",
-    "last_query_time": "Last Query Time",
-    "storage_size": "Storage Size",
-    "data_actions": "Data Actions",
-    "app_update": "Application Update",
-    "version_info": "Version Info"
+    "click_check_env_hint": "Click the check environment button to verify Python configuration"
+  },
+
+  "time_cleanup_dialog": {
+    "title": "Time-based Data Cleanup",
+    "description": "Time-based Historical Records Cleanup",
+    "tabs": {
+      "cleanup": "Cleanup",
+      "export": "Export Backup"
+    },
+    "time_selection": {
+      "title": "Select Cleanup Time Point",
+      "description": "Select date and time point, the system will display all historical records before that time. You can export Excel analysis files to folders for long-term storage, or directly cleanup records.",
+      "cleanup_time": "Cleanup Time Point: {{date}} {{time}}",
+      "cleanup_description": "Will cleanup all historical records before this time",
+      "found_records": "Found {{queryCount}} query records and {{analysisCount}} analysis records",
+      "time_range": "(Before {{date}} {{time}})",
+      "no_records": "No historical records found before {{date}} {{time}}."
+    },
+    "query_history": {
+      "title": "Query History ({{count}})",
+      "selected": "Selected {{selected}} / {{total}} records",
+      "select_all": "Select All",
+      "deselect_all": "Deselect All",
+      "row_label": "Row {{row}}",
+      "algorithm_fifo": "FIFO",
+      "algorithm_balance": "Balance Method"
+    },
+    "analysis_history": {
+      "title": "Analysis History ({{count}})",
+      "selected": "Selected {{selected}} / {{total}} records",
+      "select_all": "Select All", 
+      "deselect_all": "Deselect All",
+      "records_count": "{{count}} records"
+    },
+    "folder_names": {
+      "backup_folder": "Historical Records Backup_{{timestamp}}",
+      "analysis_results": "Analysis Results Files",
+      "backup_list": "Backup List.json",
+      "export_folder_title": "Select Export Folder"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "export_to_folder": "Export to Folder",
+      "export_then_cleanup": "Export then Cleanup",
+      "cleanup_all": "Cleanup All Directly",
+      "cleanup_selected": "Cleanup Selected Records"
+    },
+    "errors": {
+      "copy_failed": "File copy failed {{filename}}:",
+      "copy_error": "{{filename}}: Copy failed",
+      "cleanup_failed": "Cleanup failed:",
+      "batch_cleanup_failed": "Batch cleanup failed:",
+      "export_backup_failed": "Export backup failed:"
+    },
+    "backup": {
+      "export_time": "Export time: {{time}}",
+      "backup_range": "Backup range: Records before {{time}}",
+      "file_structure": "File structure:",
+      "analysis_results_folder": "├── Analysis Results Files/          # Excel analysis report files",
+      "backup_list": "├── Backup List.json         # Detailed backup information and index",
+      "readme": "└── Usage Instructions.txt          # This file",
+      "statistics": "Statistics:",
+      "query_records": "- Query history records: {{count}} items",
+      "analysis_records": "- Analysis history records: {{count}} items", 
+      "excel_files_success": "- Successfully exported Excel files: {{count}} files",
+      "export_failed": "- Export failed: {{count}} files",
+      "failed_files_list": "Failed files list:",
+      "all_files_success": "- All files exported successfully",
+      "notes": "Notes:",
+      "note_1": "1. Analysis results files folder contains all Excel analysis reports",
+      "note_2": "2. Backup List.json contains complete historical record information for data recovery",
+      "note_3": "3. These files are independent of the original app and can be stored long-term",
+      "note_4": "4. For data recovery, please contact technical support or check app documentation",
+      "original_app_path": "Original app path: C:\\Users\\TUF\\Desktop\\资金追踪\\tauri-app",
+      "readme_filename": "Usage Instructions.txt",
+      "success_title": "Backup Successful!",
+      "success_message": "Export location: {{location}}\n\nStatistics:\n- Query records: {{queryCount}} items\n- Analysis records: {{analysisCount}} items\n- Excel files: {{fileCount}} files",
+      "success_with_errors": "\n- Failed files: {{errorCount}} files",
+      "export_failed_title": "Export backup failed:",
+      "export_failed_checks": "Please check:\n1. Folder permissions\n2. Disk space\n3. Whether original files exist"
+    }
   },
 
   "analysis_history": {

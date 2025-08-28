@@ -58,9 +58,22 @@ const SettingsPage: React.FC = () => {
   const [analysisStats, setAnalysisStats] = useState<{ count: number; lastAnalysis?: string; totalSize?: number } | null>(null);
   const [tempFileStats, setTempFileStats] = useState<TempDirectoryStats | null>(null);
   const [appVersion, setAppVersion] = useState<string>('v2.0.0-Rust-Native');
+  const isDev = process.env.NODE_ENV === 'development';
   const [systemEnv, setSystemEnv] = useState<SystemEnvStatus | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(false);
   const [timeCleanupDialogOpen, setTimeCleanupDialogOpen] = useState(false);
+
+  // 翻译后端引擎名称
+  const translateBackendEngine = (backendEngine: string): string => {
+    if (backendEngine.includes('开发模式')) {
+      return t('settings.system_environment.backend_names.rust_native_dev', 'Rust Native Backend (Development Mode)');
+    } else if (backendEngine.includes('Rust Native Backend')) {
+      return t('settings.system_environment.backend_names.rust_native_prod', 'Rust Native Backend (Production Mode)');
+    } else if (backendEngine.includes('Python')) {
+      return t('settings.system_environment.backend_names.python_backend', 'Python Backend');
+    }
+    return backendEngine; // 如果不匹配任何模式，返回原始值
+  };
 
   // 加载存储统计信息
   useEffect(() => {
@@ -107,23 +120,26 @@ const SettingsPage: React.FC = () => {
       if (status.system_available) {
         showNotification({
           type: 'success',
-          title: '系统环境检查',
-          message: `系统运行正常，${status.backend_engine} ${status.backend_version} 就绪。`,
+          title: t('settings.system_environment.check_success'),
+          message: t('settings.system_environment.check_success_message', { 
+            backend_engine: translateBackendEngine(status.backend_engine),
+            backend_version: status.backend_version 
+          }),
         });
       } else {
         console.error('系统环境检查失败:', status);
         showNotification({
           type: 'error',
-          title: '系统环境检查',
-          message: '系统环境存在问题，可能影响正常使用。',
+          title: t('settings.system_environment.check_error'),
+          message: t('settings.system_environment.check_error_message'),
         });
       }
     } catch (error) {
       console.error('Environment check failed:', error);
       showNotification({
         type: 'error',
-        title: '环境检查失败',
-        message: `无法完成系统环境检查: ${error}`,
+        title: t('settings.system_environment.check_failed'),
+        message: t('settings.system_environment.check_failed_message', { error: error }),
       });
       // 设置一个默认的失败状态，而不是让systemEnv保持null
       setSystemEnv({
@@ -147,15 +163,13 @@ const SettingsPage: React.FC = () => {
   const handleVersionInfo = () => {
     showNotification({
       type: 'info',
-      title: '版本信息',
-      message: '当前为独立安装包版本，包含所有运行依赖，无需额外环境配置。',
+      title: t('settings.version_info.title'),
+      message: t('settings.version_info.version_message'),
     });
   };
 
   // 获取应用版本
   const loadAppVersion = () => {
-    // 检测开发环境
-    const isDev = process.env.NODE_ENV === 'development';
     setAppVersion(isDev ? 'v2.0.0-Dev-Mode' : 'v2.0.0-Rust-Native');
   };
 
@@ -226,7 +240,7 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
-        message: '时点查询历史已清空',
+        message: t('settings.data_notifications.query_history_cleared'),
       });
     } catch (error) {
       showNotification({
@@ -244,7 +258,7 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
-        message: '分析历史记录已清空',
+        message: t('settings.data_notifications.analysis_history_cleared'),
       });
     } catch (error) {
       showNotification({
@@ -290,7 +304,10 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
-        message: `同步完成！删除了 ${result.deletedRecords} 条无效历史记录和 ${result.deletedFiles} 个孤儿文件。`,
+        message: t('settings.data_notifications.sync_completed', { 
+          deletedRecords: result.deletedRecords, 
+          deletedFiles: result.deletedFiles 
+        }),
       });
       
       // 刷新统计信息
@@ -304,7 +321,7 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'error',
         title: t('settings.data_management'),
-        message: `同步失败: ${error}`,
+        message: t('settings.data_notifications.sync_failed', { error: error }),
       });
     }
   };
@@ -316,7 +333,10 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'success',
         title: t('settings.data_management'),
-        message: `清理完成！删除了 ${result.deleted} 个文件。${result.failed > 0 ? `有 ${result.failed} 个文件删除失败。` : ''}`,
+        message: t('settings.data_notifications.cleanup_completed', { 
+          deleted: result.deleted,
+          failedMessage: result.failed > 0 ? t('settings.data_notifications.cleanup_failed_suffix', { failed: result.failed }) : ''
+        }),
       });
       
       if (result.errors.length > 0) {
@@ -330,7 +350,7 @@ const SettingsPage: React.FC = () => {
       showNotification({
         type: 'error',
         title: t('settings.data_management'),
-        message: `清理失败: ${error}`,
+        message: t('settings.data_notifications.cleanup_failed', { error: error }),
       });
     }
   };
@@ -339,7 +359,10 @@ const SettingsPage: React.FC = () => {
     showNotification({
       type: 'success',
       title: t('settings.data_management'),
-      message: `时间清理完成！删除了 ${result.queryDeleted} 条查询记录和 ${result.analysisDeleted} 条分析记录。`,
+      message: t('settings.data_notifications.time_cleanup_completed', { 
+        queryDeleted: result.queryDeleted, 
+        analysisDeleted: result.analysisDeleted 
+      }),
     });
     
     // 刷新统计信息
@@ -446,35 +469,35 @@ const SettingsPage: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                系统架构
+                {t('settings.system_architecture.title')}
               </Typography>
               
               <Alert severity="success" sx={{ mb: 2 }}>
                 <Typography variant="subtitle2">
-                  系统状态: 运行正常
+                  {t('settings.system_architecture.status_normal')}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1 }}>
-                  高性能资金追踪分析系统，支持大规模数据处理和实时分析。
+                  {t('settings.system_architecture.description')}
                 </Typography>
               </Alert>
 
               <List dense>
                 <ListItem>
                   <ListItemText
-                    primary="处理能力"
-                    secondary="支持万级以上交易记录快速分析"
+                    primary={t('settings.system_architecture.processing_capability')}
+                    secondary={t('settings.system_architecture.processing_capability_desc')}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
-                    primary="分析算法"
-                    secondary="FIFO算法和差额计算法双引擎支持"
+                    primary={t('settings.system_architecture.analysis_algorithms')}
+                    secondary={t('settings.system_architecture.analysis_algorithms_desc')}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
-                    primary="结果输出"
-                    secondary="Excel格式专业报告，支持历史记录管理"
+                    primary={t('settings.system_architecture.result_output')}
+                    secondary={t('settings.system_architecture.result_output_desc')}
                   />
                 </ListItem>
               </List>
@@ -488,7 +511,7 @@ const SettingsPage: React.FC = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                  系统环境检查
+                  {t('settings.system_environment.title')}
                 </Typography>
                 <Button
                   variant="outlined"
@@ -497,7 +520,7 @@ const SettingsPage: React.FC = () => {
                   onClick={handleCheckEnvironment}
                   disabled={checkingEnv}
                 >
-                  {checkingEnv ? '检查中...' : '检查环境'}
+{checkingEnv ? t('settings.system_environment.checking') : t('settings.system_environment.check_environment')}
                 </Button>
               </Box>
 
@@ -508,16 +531,16 @@ const SettingsPage: React.FC = () => {
                     sx={{ mb: 2 }}
                   >
                     <Typography variant="subtitle2">
-                      环境状态: {
-                        systemEnv.system_available ? '正常' : '异常'
+                      {t('settings.system_environment.environment_status')}: {
+                        systemEnv.system_available ? t('settings.system_environment.status_normal') : t('settings.system_environment.status_error')
                       }
                     </Typography>
                     <Typography variant="body2">
-                      后端引擎: {systemEnv.backend_engine} {systemEnv.backend_version}
+                      {t('settings.system_environment.backend_engine')}: {translateBackendEngine(systemEnv.backend_engine)} {systemEnv.backend_version}
                     </Typography>
                     {systemEnv.is_dev_mode && (
                       <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic' }}>
-                        💡 当前运行在开发模式下，环境检查已放宽要求
+                        {t('settings.system_environment.dev_mode_hint')}
                       </Typography>
                     )}
                   </Alert>
@@ -525,25 +548,25 @@ const SettingsPage: React.FC = () => {
                   <List dense>
                     <ListItem>
                       <ListItemText
-                        primary="文件系统访问"
-                        secondary={systemEnv.file_system_access ? '正常' : '异常'}
+                        primary={t('settings.system_environment.file_system_access')}
+                        secondary={systemEnv.file_system_access ? t('settings.system_environment.status_normal') : t('settings.system_environment.status_error')}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText
-                        primary="临时目录访问"
-                        secondary={systemEnv.temp_directory_access ? '正常' : '异常'}
+                        primary={t('settings.system_environment.temp_directory_access')}
+                        secondary={systemEnv.temp_directory_access ? t('settings.system_environment.status_normal') : t('settings.system_environment.status_error')}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText
-                        primary="工作目录写入"
-                        secondary={systemEnv.work_directory_writable ? '正常' : '异常'}
+                        primary={t('settings.system_environment.work_directory_writable')}
+                        secondary={systemEnv.work_directory_writable ? t('settings.system_environment.status_normal') : t('settings.system_environment.status_error')}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText
-                        primary="系统信息"
+                        primary={t('settings.system_environment.system_info')}
                         secondary={systemEnv.system_info}
                       />
                     </ListItem>
@@ -551,7 +574,7 @@ const SettingsPage: React.FC = () => {
                 </Box>
               ) : (
                 <Alert severity="info">
-                  点击"检查环境"按钮验证系统运行环境。
+                  {t('settings.system_environment.click_check_hint')}
                 </Alert>
               )}
             </CardContent>
@@ -577,7 +600,7 @@ const SettingsPage: React.FC = () => {
                       {t('settings.history_count')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
-                      {storageStats?.count || 0} 条
+                      {storageStats?.count || 0} {t('settings.data_management_labels.count_unit')}
                     </Typography>
                   </Grid>
                   {storageStats?.lastSaved && (
@@ -586,7 +609,7 @@ const SettingsPage: React.FC = () => {
                         {t('settings.last_query_time')}
                       </Typography>
                       <Typography variant="body1" fontWeight="bold">
-                        {formatLocalTime(storageStats.lastSaved, 'display')}
+                        {formatLocalTime(storageStats.lastSaved, 'display', currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}
                       </Typography>
                     </Grid>
                   )}
@@ -604,30 +627,30 @@ const SettingsPage: React.FC = () => {
               {/* 分析历史统计 */}
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  资金分析历史
+                  {t('settings.data_management_labels.analysis_history_title')}
                 </Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={4}>
                     <Typography variant="body2" color="text.secondary">
-                      分析记录数量
+                      {t('settings.data_management_labels.analysis_record_count')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
-                      {analysisStats?.count || 0} 条
+                      {analysisStats?.count || 0} {t('settings.data_management_labels.count_unit')}
                     </Typography>
                   </Grid>
                   {analysisStats?.lastAnalysis && (
                     <Grid item xs={6} sm={4}>
                       <Typography variant="body2" color="text.secondary">
-                        最近分析时间
+                        {t('settings.data_management_labels.last_analysis_time')}
                       </Typography>
                       <Typography variant="body1" fontWeight="bold">
-                        {formatLocalTime(analysisStats.lastAnalysis, 'display')}
+                        {formatLocalTime(analysisStats.lastAnalysis, 'display', currentLanguage === 'zh' ? 'zh-CN' : 'en-US')}
                       </Typography>
                     </Grid>
                   )}
                   <Grid item xs={12} sm={4}>
                     <Typography variant="body2" color="text.secondary">
-                      输出文件总大小
+                      {t('settings.data_management_labels.output_file_size')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
                       {analysisStats?.totalSize ? 
@@ -642,20 +665,20 @@ const SettingsPage: React.FC = () => {
               {/* 临时文件统计 */}
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  临时文件管理
+                  {t('settings.data_management_labels.temp_file_management')}
                 </Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
-                      文件总数
+                      {t('settings.data_management_labels.total_files')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
-                      {tempFileStats?.totalFiles || 0} 个
+                      {tempFileStats?.totalFiles || 0} {t('settings.data_management_labels.file_unit')}
                     </Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
-                      总文件大小
+                      {t('settings.data_management_labels.total_file_size')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
                       {tempFileStats?.totalSize ? 
@@ -666,24 +689,24 @@ const SettingsPage: React.FC = () => {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
-                      已跟踪文件
+                      {t('settings.data_management_labels.tracked_files')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold" color="success.main">
-                      {tempFileStats?.trackedFiles || 0} 个
+                      {tempFileStats?.trackedFiles || 0} {t('settings.data_management_labels.file_unit')}
                     </Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
-                      孤儿文件
+                      {t('settings.data_management_labels.orphaned_files')}
                     </Typography>
                     <Typography variant="body1" fontWeight="bold" color="warning.main">
-                      {tempFileStats?.orphanedFiles || 0} 个
+                      {tempFileStats?.orphanedFiles || 0} {t('settings.data_management_labels.file_unit')}
                     </Typography>
                   </Grid>
                   {tempFileStats && tempFileStats.safeToDeleteFiles > 0 && (
                     <Grid item xs={12}>
                       <Alert severity="info" variant="outlined">
-                        检测到 {tempFileStats.safeToDeleteFiles} 个可安全删除的文件，建议定期清理以释放存储空间。
+                        {t('settings.data_management_details.safe_cleanup_hint', { count: tempFileStats.safeToDeleteFiles })}
                       </Alert>
                     </Grid>
                   )}
@@ -705,7 +728,7 @@ const SettingsPage: React.FC = () => {
                     onClick={handleClearQueryHistory}
                     disabled={queryState.history.length === 0}
                   >
-                    清空时点查询历史
+                    {t('settings.data_actions_buttons.clear_query_history')}
                   </Button>
                   <Button
                     variant="outlined"
@@ -714,7 +737,7 @@ const SettingsPage: React.FC = () => {
                     onClick={handleClearAnalysisHistory}
                     disabled={(analysisStats?.count || 0) === 0}
                   >
-                    清空分析历史
+                    {t('settings.data_actions_buttons.clear_analysis_history')}
                   </Button>
                   <Button
                     variant="outlined"
@@ -726,7 +749,7 @@ const SettingsPage: React.FC = () => {
                       (analysisStats?.count || 0) === 0
                     }
                   >
-                    按时间清理
+                    {t('settings.data_actions_buttons.time_based_cleanup')}
                   </Button>
                   <Button
                     variant="outlined"
@@ -735,7 +758,7 @@ const SettingsPage: React.FC = () => {
                     onClick={handleSyncHistoryWithFiles}
                     disabled={!tempFileStats || (tempFileStats.totalFiles === 0 && (analysisStats?.count || 0) === 0)}
                   >
-                    同步历史记录
+                    {t('settings.data_actions_buttons.sync_history_records')}
                   </Button>
                   <Button
                     variant="outlined"
@@ -744,7 +767,7 @@ const SettingsPage: React.FC = () => {
                     onClick={handleCleanupSafeFiles}
                     disabled={!tempFileStats || tempFileStats.safeToDeleteFiles === 0}
                   >
-                    清理安全文件 ({tempFileStats?.safeToDeleteFiles || 0})
+                    {t('settings.data_actions_buttons.cleanup_safe_files')} ({tempFileStats?.safeToDeleteFiles || 0})
                   </Button>
                   <Button
                     variant="outlined"
@@ -762,30 +785,33 @@ const SettingsPage: React.FC = () => {
                   <Box>
                     {queryState.history.length > 0 && (
                       <Typography variant="body2" sx={{ mb: 1 }}>
-                        • 时点查询历史包含 {queryState.history.length} 条记录，软件重启后仍会保留
+                        {t('settings.data_management_details.query_history_status', { count: queryState.history.length })}
                       </Typography>
                     )}
                     {(analysisStats?.count || 0) > 0 && (
                       <Typography variant="body2" sx={{ mb: 1 }}>
-                        • 分析历史包含 {analysisStats?.count} 条记录，包括生成的Excel分析报告文件
+                        {t('settings.data_management_details.analysis_history_status', { count: analysisStats?.count })}
                       </Typography>
                     )}
                     {tempFileStats && tempFileStats.totalFiles > 0 && (
                       <Typography variant="body2" sx={{ mb: 1 }}>
-                        • 临时目录包含 {tempFileStats.totalFiles} 个文件，其中 {tempFileStats.orphanedFiles} 个为孤儿文件
+                        {t('settings.data_management_details.temp_files_status', { 
+                          totalFiles: tempFileStats.totalFiles, 
+                          orphanedFiles: tempFileStats.orphanedFiles 
+                        })}
                       </Typography>
                     )}
                     <Typography variant="body2" color="text.secondary">
-                      系统会根据您设置的最大记录数量（当前: {settings.maxHistoryRecords} 条）自动管理历史记录。使用"同步历史记录"可以清理孤儿文件并确保数据一致性。
+                      {t('settings.data_management_details.auto_management_desc', { count: settings.maxHistoryRecords })}
                     </Typography>
                     {((storageStats?.count || 0) > settings.maxHistoryRecords || (analysisStats?.count || 0) > settings.maxHistoryRecords) && (
                       <Typography variant="body2" sx={{ mt: 1, color: 'warning.main', fontWeight: 500 }}>
-                        ⚠️ 检测到历史记录已超出设定限制，建议使用"按时间清理"功能进行整理
+                        {t('settings.data_management_details.history_limit_warning')}
                       </Typography>
                     )}
                     {tempFileStats && tempFileStats.orphanedFiles > 0 && (
                       <Typography variant="body2" sx={{ mt: 1, color: 'warning.main', fontWeight: 500 }}>
-                        ⚠️ 检测到 {tempFileStats.orphanedFiles} 个孤儿文件，建议使用"同步历史记录"功能进行清理
+                        {t('settings.data_management_details.orphan_files_warning', { count: tempFileStats.orphanedFiles })}
                       </Typography>
                     )}
                   </Box>
@@ -801,7 +827,7 @@ const SettingsPage: React.FC = () => {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                  版本信息
+                  {t('settings.version_info.title')}
                 </Typography>
                 <Button
                   variant="outlined"
@@ -809,18 +835,18 @@ const SettingsPage: React.FC = () => {
                   startIcon={<UpdateIcon />}
                   onClick={handleVersionInfo}
                 >
-                  版本信息
+                  {t('settings.version_info.title')}
                 </Button>
               </Box>
 
-              <Alert severity={appVersion.includes('Dev') ? 'info' : 'success'} sx={{ mb: 2 }}>
+              <Alert severity={isDev ? 'info' : 'success'} sx={{ mb: 2 }}>
                 <Typography variant="subtitle2">
-                  当前版本: {appVersion}
+                  {t('settings.version_info.current_version')}: {appVersion}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 1 }}>
-                  {appVersion.includes('Dev') 
-                    ? '开发模式版本，用于测试和调试。正式发布版本将打包为独立安装包。'
-                    : '独立安装包版本，内置Rust高性能引擎，无需Python环境，一键安装即可使用。'
+                  {isDev 
+                    ? t('settings.legacy_version_info.dev_version_desc')
+                    : t('settings.legacy_version_info.standalone_version_desc')
                   }
                 </Typography>
               </Alert>
@@ -828,20 +854,20 @@ const SettingsPage: React.FC = () => {
               <List dense>
                 <ListItem>
                   <ListItemText
-                    primary="软件类型"
-                    secondary="独立桌面应用程序，免安装依赖"
+                    primary={t('settings.legacy_version_info.software_type')}
+                    secondary={t('settings.legacy_version_info.software_type_desc')}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
-                    primary="更新方式"
-                    secondary="通过安装新版本安装包进行更新"
+                    primary={t('settings.legacy_version_info.update_method')}
+                    secondary={t('settings.legacy_version_info.update_method_desc')}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
-                    primary="技术优势"
-                    secondary="Rust原生实现，处理速度比Python版本提升3-5倍"
+                    primary={t('settings.legacy_version_info.technical_advantage')}
+                    secondary={t('settings.legacy_version_info.technical_advantage_desc')}
                   />
                 </ListItem>
               </List>

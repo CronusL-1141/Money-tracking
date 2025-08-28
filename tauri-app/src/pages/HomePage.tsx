@@ -68,7 +68,7 @@ const HomePage: React.FC = () => {
             textAlign: 'center'
           }}
         >
-          {t('app.title')}
+{t('app.title')}
         </Typography>
         <Typography variant="h6" color="text.secondary">
           {t('app.subtitle')}

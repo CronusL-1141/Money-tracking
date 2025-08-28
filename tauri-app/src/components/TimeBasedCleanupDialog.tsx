@@ -221,7 +221,7 @@ const TimeBasedCleanupDialog: React.FC<TimeBasedCleanupDialogProps> = ({
       // 选择导出文件夹
       const exportFolder = await open({
         directory: true,
-        title: '选择导出文件夹'
+        title: t('time_cleanup_dialog.folder_names.export_folder_title')
       });
 
       if (!exportFolder || typeof exportFolder !== 'string') {
@@ -231,7 +231,7 @@ const TimeBasedCleanupDialog: React.FC<TimeBasedCleanupDialogProps> = ({
       // 创建带时间戳的子文件夹
       const timestamp = formatLocalTime(new Date(), 'filename');
       const cutoffTime = new Date(dateTime.year, dateTime.month - 1, dateTime.day, dateTime.hour, dateTime.minute, 59, 999);
-      const backupFolderName = `历史记录备份_${timestamp}`;
+      const backupFolderName = t('time_cleanup_dialog.folder_names.backup_folder', { timestamp });
       const backupFolderPath = await join(exportFolder, backupFolderName);
       
       await createDir(backupFolderPath, { recursive: true });
@@ -241,20 +241,20 @@ const TimeBasedCleanupDialog: React.FC<TimeBasedCleanupDialogProps> = ({
 
       // 导出分析历史记录的Excel文件
       if (analysisRecords.length > 0) {
-        const analysisFolder = await join(backupFolderPath, '分析结果文件');
+        const analysisFolder = await join(backupFolderPath, t('time_cleanup_dialog.folder_names.analysis_results'));
         await createDir(analysisFolder, { recursive: true });
 
         for (const record of analysisRecords) {
           try {
             if (record.outputFile?.path && await exists(record.outputFile.path)) {
-              const fileName = record.outputFile.name || `分析结果_${record.id}.xlsx`;
+              const fileName = record.outputFile.name || `Analysis_Result_${record.id}.xlsx`;
               const destPath = await join(analysisFolder, fileName);
               await copyFile(record.outputFile.path, destPath);
               copiedFiles++;
             }
           } catch (error) {
-            console.error(`复制文件失败 ${record.outputFile?.name}:`, error);
-            errors.push(`${record.outputFile?.name}: 复制失败`);
+            console.error(t('time_cleanup_dialog.errors.copy_failed', { filename: record.outputFile?.name }), error);
+            errors.push(t('time_cleanup_dialog.errors.copy_error', { filename: record.outputFile?.name }));
           }
         }
       }
@@ -294,42 +294,47 @@ const TimeBasedCleanupDialog: React.FC<TimeBasedCleanupDialogProps> = ({
       await writeTextFile(indexPath, JSON.stringify(indexData, null, 2));
 
       // 创建使用说明文件
-      const readmeContent = `历史记录备份说明
+      const readmeContent = `${t('app.title')} - Historical Records Backup
 ================
 
-导出时间：${formatLocalTime(new Date(), 'display')}
-备份范围：${formatLocalTime(cutoffTime, 'display')} 之前的记录
+${t('time_cleanup_dialog.backup.export_time', { time: formatLocalTime(new Date(), 'display') })}
+${t('time_cleanup_dialog.backup.backup_range', { time: formatLocalTime(cutoffTime, 'display') })}
 
-文件结构：
-├── 分析结果文件/          # Excel分析报告文件
-├── 备份清单.json         # 详细的备份信息和索引
-└── 使用说明.txt          # 本文件
+${t('time_cleanup_dialog.backup.file_structure')}
+${t('time_cleanup_dialog.backup.analysis_results_folder')}
+${t('time_cleanup_dialog.backup.backup_list')}
+${t('time_cleanup_dialog.backup.readme')}
 
-统计信息：
-- 查询历史记录：${queryRecords.length} 条
-- 分析历史记录：${analysisRecords.length} 条
-- 成功导出Excel文件：${copiedFiles} 个
-${errors.length > 0 ? `- 导出失败：${errors.length} 个文件\n\n失败文件清单：\n${errors.join('\n')}` : '- 所有文件导出成功'}
+${t('time_cleanup_dialog.backup.statistics')}
+${t('time_cleanup_dialog.backup.query_records', { count: queryRecords.length })}
+${t('time_cleanup_dialog.backup.analysis_records', { count: analysisRecords.length })}
+${t('time_cleanup_dialog.backup.excel_files_success', { count: copiedFiles })}
+${errors.length > 0 ? `${t('time_cleanup_dialog.backup.export_failed', { count: errors.length })}\n\n${t('time_cleanup_dialog.backup.failed_files_list')}\n${errors.join('\n')}` : t('time_cleanup_dialog.backup.all_files_success')}
 
-注意事项：
-1. 分析结果文件文件夹包含所有的Excel分析报告
-2. 备份清单.json包含完整的历史记录信息，可用于数据恢复
-3. 这些文件独立于原应用，可以长期保存
-4. 如需恢复数据，请联系技术支持或查看应用文档
+${t('time_cleanup_dialog.backup.notes')}
+${t('time_cleanup_dialog.backup.note_1')}
+${t('time_cleanup_dialog.backup.note_2')}
+${t('time_cleanup_dialog.backup.note_3')}
+${t('time_cleanup_dialog.backup.note_4')}
 
-原应用路径：C:\\Users\\TUF\\Desktop\\资金追踪\\tauri-app
+${t('time_cleanup_dialog.backup.original_app_path')}
 `;
 
-      const readmePath = await join(backupFolderPath, '使用说明.txt');
+      const readmePath = await join(backupFolderPath, t('time_cleanup_dialog.backup.readme_filename'));
       await writeTextFile(readmePath, readmeContent);
 
       // 显示成功提示
-      alert(`备份成功！\n\n导出位置：${backupFolderPath}\n\n统计信息：\n- 查询记录：${queryRecords.length} 条\n- 分析记录：${analysisRecords.length} 条\n- Excel文件：${copiedFiles} 个${errors.length > 0 ? `\n- 失败文件：${errors.length} 个` : ''}`);
+      alert(`${t('time_cleanup_dialog.backup.success_title')}\n\n${t('time_cleanup_dialog.backup.success_message', {
+        location: backupFolderPath,
+        queryCount: queryRecords.length,
+        analysisCount: analysisRecords.length,
+        fileCount: copiedFiles
+      })}${errors.length > 0 ? t('time_cleanup_dialog.backup.success_with_errors', { errorCount: errors.length }) : ''}`);
       
       return true;
     } catch (error) {
       console.error('导出备份失败:', error);
-      alert(`导出备份失败：\n${error}\n\n请检查：\n1. 文件夹权限\n2. 磁盘空间\n3. 原文件是否存在`);
+      alert(`${t('time_cleanup_dialog.backup.export_failed_title')}\n${error}\n\n${t('time_cleanup_dialog.backup.export_failed_checks')}`);
       return false;
     } finally {
       setLoading(false);

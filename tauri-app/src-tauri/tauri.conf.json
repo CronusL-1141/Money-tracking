@@ -1,13 +1,13 @@
 {
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:fast",
     "devPath": "http://localhost:3000",
     "distDir": "../dist",
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "FLUX分析系统",
+    "productName": "FLUX Analysis System",
     "version": "2.0.0"
   },
   "tauri": {
@@ -74,14 +74,18 @@
     },
     "bundle": {
       "active": true,
-      "targets": ["app"],
+      "targets": ["app", "nsis"],
       "identifier": "com.audit.fifo.desktop",
       "icon": [
         "icons/icon.ico"
       ],
       "category": "Business",
-      "shortDescription": "FLUX分析系统",
-      "windows": {},
+      "shortDescription": "FLUX Analysis System",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      },
       "externalBin": [],
       "resources": []
     },

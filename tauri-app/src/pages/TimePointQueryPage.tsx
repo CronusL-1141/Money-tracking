@@ -120,7 +120,7 @@ const TimePointQueryPage: React.FC = () => {
               if (currentQueryState.filePath !== filePath) {
                 console.log(`[时点查询] 文件变更: ${currentQueryState.filePath} -> ${filePath}`);
                 // 先添加本页面日志，再更新全局状态
-                currentAppend(createLogMessage(`已选择文件：${fileName}`, 'success'));
+                currentAppend(createLogMessage(currentT('query.log_messages.file_selected', { filename: fileName }), 'success'));
                 currentUpdate(filePath); // 使用全局更新方法，一次性同步所有页面
               } else {
                 console.log(`[时点查询] 文件相同，跳过日志添加: ${fileName}`);
@@ -194,7 +194,7 @@ const TimePointQueryPage: React.FC = () => {
         
         // 只在不是重复选择时添加日志并更新全局文件状态
         if (queryState.filePath !== selected) {
-          appendQueryLog(createLogMessage(`已选择文件：${fileName}`, 'success'));
+          appendQueryLog(createLogMessage(t('query.log_messages.file_selected', { filename: fileName }), 'success'));
           updateGlobalSelectedFile(selected); // 使用全局更新方法，一次性同步所有页面
         }
         showNotification({
@@ -263,7 +263,7 @@ const TimePointQueryPage: React.FC = () => {
     updateQueryState({ isQuerying: true });
     
     // 添加查询开始日志
-    appendQueryLog(createLogMessage(`开始查询第${rowNum}行数据，算法：${algorithm === 'FIFO' ? 'FIFO计算法' : '差额计算法'}`, 'info'));
+    appendQueryLog(createLogMessage(t('query.log_messages.query_started', { row: rowNum, algorithm: t(`algorithms.${algorithm}`) }), 'info'));
     
     // 启动状态轮询
     const interval = setInterval(fetchProcessStatus, 200);
@@ -345,12 +345,12 @@ const TimePointQueryPage: React.FC = () => {
         
         // 添加查询成功日志
         const processingTime = data.processing_time ? data.processing_time.toFixed(3) : '0.000';
-        appendQueryLog(createLogMessage(`查询成功 - 处理时间：${processingTime}秒`, 'success'));
-        appendQueryLog(createLogMessage(`获取到第${rowNum}行数据，总行数：${data.total_rows}`, 'info'));
+        appendQueryLog(createLogMessage(t('query.log_messages.query_success', { time: processingTime }), 'success'));
+        appendQueryLog(createLogMessage(t('query.log_messages.row_data_retrieved', { row: rowNum, totalRows: data.total_rows }), 'info'));
       } else {
         // 查询失败
         updateQueryState({ queryResult: null });
-        appendQueryLog(createLogMessage(`查询失败：${queryResult.message || '未知错误'}`, 'error'));
+        appendQueryLog(createLogMessage(t('query.log_messages.query_failed', { message: queryResult.message || t('errors.unknown_error') }), 'error'));
         showNotification({
           type: 'error',
           title: t('notifications.errors.query_failed'),
@@ -361,7 +361,7 @@ const TimePointQueryPage: React.FC = () => {
     } catch (error) {
       console.error('Query failed:', error);
       updateQueryState({ queryResult: null });
-      appendQueryLog(createLogMessage(`查询异常：${error}`, 'error'));
+      appendQueryLog(createLogMessage(t('query.log_messages.query_exception', { error }), 'error'));
       showNotification({
         type: 'error',
         title: t('notifications.errors.query_exception'),
@@ -385,7 +385,7 @@ const TimePointQueryPage: React.FC = () => {
   const handleClearHistory = () => {
     clearQueryHistory();
     clearQueryLog();
-    appendQueryLog(createLogMessage('查询历史和日志已清空', 'info'));
+    appendQueryLog(createLogMessage(t('query.log_messages.history_cleared'), 'info'));
   };
 
   // 资金池查询处理函数
@@ -395,7 +395,7 @@ const TimePointQueryPage: React.FC = () => {
     
     setIsQueryingPool(true);
     try {
-      appendQueryLog(createLogMessage(`获取资金池详情：${targetPool}`, 'info'));
+      appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_query_start', { pool: targetPool }), 'info'));
       
       // 从时点查询结果中获取真实的资金池记录
       const fundPoolRecords = queryResult.fund_pool_records?.[targetPool];
@@ -425,8 +425,8 @@ const TimePointQueryPage: React.FC = () => {
           }
         });
         
-        appendQueryLog(createLogMessage(`资金池${targetPool}查询成功：${fundPoolRecords.length}条交易记录`, 'success'));
-        appendQueryLog(createLogMessage(`当前余额：¥${currentBalance.toLocaleString()}，累计入金：¥${totalInflow.toLocaleString()}`, 'info'));
+        appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_query_success', { pool: targetPool, count: fundPoolRecords.length }), 'success'));
+        appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_balance_info', { balance: currentBalance.toLocaleString(), inflow: totalInflow.toLocaleString() }), 'info'));
       } else if (selectedPoolData) {
         // 资金池存在但没有交易记录
         setFundPoolResult({
@@ -441,18 +441,18 @@ const TimePointQueryPage: React.FC = () => {
           }
         });
         
-        appendQueryLog(createLogMessage(`资金池${targetPool}存在但无交易记录`, 'info'));
-        appendQueryLog(createLogMessage(`当前余额：¥${selectedPoolData.total_amount.toLocaleString()}`, 'info'));
+        appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_no_records', { pool: targetPool }), 'info'));
+        appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_balance_only', { balance: selectedPoolData.total_amount.toLocaleString() }), 'info'));
       } else {
         setFundPoolResult({
           success: false,
           pool_name: targetPool,
-          message: '未找到该资金池信息'
+          message: t('query.log_messages.fund_pool_not_found', { pool: targetPool })
         });
-        appendQueryLog(createLogMessage(`未找到资金池：${targetPool}`, 'error'));
+        appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_not_found', { pool: targetPool }), 'error'));
       }
     } catch (error) {
-      appendQueryLog(createLogMessage(`资金池查询异常：${error}`, 'error'));
+      appendQueryLog(createLogMessage(t('query.log_messages.fund_pool_exception', { error }), 'error'));
       console.error('Fund pool query failed:', error);
     } finally {
       setIsQueryingPool(false);
@@ -465,8 +465,8 @@ const TimePointQueryPage: React.FC = () => {
       if (!queryResult || !queryResult.available_fund_pools || !queryResult.fund_pool_records) {
         showNotification({
           type: 'warning',
-          title: '导出失败',
-          message: '没有可导出的资金池数据',
+          title: t('query.export.failed_title'),
+          message: t('query.export.failed_message'),
         });
         return;
       }
@@ -480,10 +480,10 @@ const TimePointQueryPage: React.FC = () => {
       const defaultPath = inputDir ? `${inputDir}\\${defaultFileName}` : defaultFileName;
       
       const outputPath = await save({
-        title: '另存为Excel文件',
+        title: t('query.export.title'),
         defaultPath: defaultPath,
         filters: [{
-          name: 'Excel文件',
+          name: t('query.export.excel_files'),
           extensions: ['xlsx']
         }]
       });
@@ -493,7 +493,7 @@ const TimePointQueryPage: React.FC = () => {
         return;
       }
       
-      appendQueryLog(createLogMessage('开始导出当前时点全部资金池信息到Excel', 'info'));
+      appendQueryLog(createLogMessage(t('query.log_messages.export_start'), 'info'));
       
       // 构造Excel导出数据
       const exportData = {
@@ -513,23 +513,23 @@ const TimePointQueryPage: React.FC = () => {
       const result = await invoke('export_fund_pools_excel', { request: exportData });
       
       if (result.success) {
-        appendQueryLog(createLogMessage(`当前时点资金池信息已导出到：${result.output_path}`, 'success'));
+        appendQueryLog(createLogMessage(t('query.log_messages.export_success', { path: result.output_path }), 'success'));
         showNotification({
           type: 'success',
-          title: '导出成功',
-          message: `当前时点资金池信息已导出到：${result.output_path}`,
+          title: t('query.export.success_title'),
+          message: t('query.export.success_message', { path: result.output_path }),
         });
       } else {
-        throw new Error(result.message || '导出失败');
+        throw new Error(result.message || t('query.export.failed_title'));
       }
       
     } catch (error) {
-      const errorMsg = `资金池信息导出异常：${error}`;
+      const errorMsg = t('query.log_messages.export_error', { error });
       appendQueryLog(createLogMessage(errorMsg, 'error'));
       console.error('Fund pool export failed:', error);
       showNotification({
         type: 'error',
-        title: '导出异常',
+        title: t('query.export.exception_title'),
         message: errorMsg,
       });
     }
@@ -665,7 +665,7 @@ const TimePointQueryPage: React.FC = () => {
                 <CardContent sx={{ maxHeight: '550px', overflow: 'auto' }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h6">
-                      资金池信息
+                      {t('query.fund_pools.title')}
                     </Typography>
                     {queryResult && queryResult.available_fund_pools && queryResult.available_fund_pools.length > 0 && (
                       <Button
@@ -674,7 +674,7 @@ const TimePointQueryPage: React.FC = () => {
                         startIcon={<ExportIcon />}
                         onClick={handleExportFundPool}
                       >
-                        另存为
+{t('query.fund_pools.save_as')}
                       </Button>
                     )}
                   </Box>
@@ -683,13 +683,13 @@ const TimePointQueryPage: React.FC = () => {
                   {queryResult && queryResult.available_fund_pools && queryResult.available_fund_pools.length > 0 ? (
                     <Box>
                       <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                        发现活跃资金池: {queryResult.available_fund_pools.length} 个
+                        {t('query.fund_pools.active_pools_found')}: {t('query.fund_pools.pool_count', { count: queryResult.available_fund_pools.length })}
                       </Typography>
                       
                       {/* 分类筛选 */}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                         <FormControl size="small" sx={{ minWidth: 120 }}>
-                          <InputLabel>资金池类型</InputLabel>
+                          <InputLabel>{t('query.fund_pools.pool_type')}</InputLabel>
                           <Select
                             value={selectedCategory}
                             onChange={(e) => {
@@ -697,9 +697,9 @@ const TimePointQueryPage: React.FC = () => {
                               setSelectedSubCategory('');
                               setSelectedPool('');
                             }}
-                            label="资金池类型"
+                            label={t('query.fund_pools.pool_type')}
                           >
-                            <MenuItem value="">全部类型</MenuItem>
+                            <MenuItem value="">{t('query.fund_pools.all_types')}</MenuItem>
                             {(() => {
                               // 提取所有资金池的类型（"-"之前的部分）
                               const categories = Array.from(new Set(
@@ -718,17 +718,17 @@ const TimePointQueryPage: React.FC = () => {
                         </FormControl>
 
                         <FormControl size="small" sx={{ minWidth: 150 }}>
-                          <InputLabel>子类型</InputLabel>
+                          <InputLabel>{t('query.fund_pools.subcategory')}</InputLabel>
                           <Select
                             value={selectedSubCategory}
                             onChange={(e) => {
                               setSelectedSubCategory(e.target.value);
                               setSelectedPool('');
                             }}
-                            label="子类型"
+                            label={t('query.fund_pools.subcategory')}
                             disabled={!selectedCategory}
                           >
-                            <MenuItem value="">全部子类型</MenuItem>
+                            <MenuItem value="">{t('query.fund_pools.all_subcategories')}</MenuItem>
                             {(() => {
                               if (!selectedCategory) return [];
                               // 获取选定类型下的所有子类型
@@ -737,7 +737,7 @@ const TimePointQueryPage: React.FC = () => {
                                   .filter((pool: FundPool) => pool.name.startsWith(selectedCategory + '-'))
                                   .map((pool: FundPool) => {
                                     const parts = pool.name.split('-');
-                                    return parts.slice(1).join('-') || '其他';
+                                    return parts.slice(1).join('-') || t('query.fund_pools.other');
                                   })
                               )).sort();
                               return subCategories.map(subCategory => (
@@ -770,24 +770,24 @@ const TimePointQueryPage: React.FC = () => {
                           startIcon={<SearchIcon />}
                           sx={{ minWidth: 120 }}
                         >
-                          {isQueryingPool ? '查询中...' : '查询详情'}
+{isQueryingPool ? t('query.fund_pools.querying') : t('query.fund_pools.query_details')}
                         </Button>
                       </Box>
                     </Box>
                   ) : queryResult ? (
                     <Box sx={{ mb: 3 }}>
                       <Alert severity="info">
-                        当前时点尚未发现投资产品资金池
+                        {t('query.fund_pools.no_pools_found')}
                         <br />
-                        <small>资金池通常出现在申购/赎回等投资产品交易中</small>
+                        <small>{t('query.fund_pools.no_pools_hint')}</small>
                       </Alert>
                     </Box>
                   ) : (
                     <Box sx={{ mb: 3 }}>
                       <Alert severity="info">
-                        请先执行时点查询以获取资金池信息
+                        {t('query.fund_pools.no_query_yet')}
                         <br />
-                        <small>选择Excel文件并输入行号后点击查询按钮</small>
+                        <small>{t('query.fund_pools.no_query_hint')}</small>
                       </Alert>
                     </Box>
                   )}
@@ -958,20 +958,20 @@ const TimePointQueryPage: React.FC = () => {
                 {fundPoolResult.success && fundPoolResult.records && fundPoolResult.records.length > 0 && (
                   <Box>
                     <Typography variant="subtitle2" gutterBottom>
-                      {fundPoolResult.pool_name} - 详细交易记录 ({fundPoolResult.records.length}条)
+                      {fundPoolResult.pool_name} - {t('query.fund_pools.detailed_records')} ({t('query.fund_pools.record_count', { count: fundPoolResult.records.length })})
                     </Typography>
                     <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
                       <Table size="small" stickyHeader>
                         <TableHead>
                           <TableRow>
-                            <TableCell sx={{ textAlign: 'center' }}>交易时间</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>资金流向</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>总余额</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>个人余额</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>公司余额</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>累计申购</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>累计赎回</TableCell>
-                            <TableCell sx={{ textAlign: 'center' }}>净盈亏</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.transaction_time')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.fund_flow')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.total_balance')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.personal_balance')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.company_balance')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.cumulative_subscription')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.cumulative_redemption')}</TableCell>
+                            <TableCell sx={{ textAlign: 'center' }}>{t('query.fund_pools.net_profit_loss')}</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -981,11 +981,11 @@ const TimePointQueryPage: React.FC = () => {
                             
                             let flowDisplay = '';
                             if (inflow > 0 && outflow > 0) {
-                              flowDisplay = `入金 ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})} / 出金 ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                              flowDisplay = `${t('query.fund_pools.inflow')} ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})} / ${t('query.fund_pools.outflow')} ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
                             } else if (inflow > 0) {
-                              flowDisplay = `入金 ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                              flowDisplay = `${t('query.fund_pools.inflow')} ¥${inflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
                             } else if (outflow > 0) {
-                              flowDisplay = `出金 ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+                              flowDisplay = `${t('query.fund_pools.outflow')} ¥${outflow.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
                             } else {
                               flowDisplay = '--';
                             }
@@ -1041,17 +1041,17 @@ const TimePointQueryPage: React.FC = () => {
                 {fundPoolResult.success && (!fundPoolResult.records || fundPoolResult.records.length === 0) && (
                   <Box>
                     <Typography variant="subtitle2" gutterBottom>
-                      {fundPoolResult.pool_name} - 资金池信息
+                      {fundPoolResult.pool_name} - {t('query.fund_pools.title')}
                     </Typography>
                     <Alert severity="info">
-                      该资金池在当前时点没有交易记录。
+                      {t('query.fund_pools.no_records')}
                     </Alert>
                   </Box>
                 )}
                 
                 {!fundPoolResult.success && (
                   <Alert severity="error">
-                    {fundPoolResult.message || '资金池查询失败'}
+{fundPoolResult.message || t('query.fund_pools.query_failed')}
                   </Alert>
                 )}
               </CardContent>
@@ -1210,11 +1210,23 @@ const TimePointQueryPage: React.FC = () => {
                       {history.slice(0, 10).map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>
-                            {formatLocalTime(item.timestamp, 'display')}
+                            {(() => {
+                              const date = new Date(item.timestamp);
+                              const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+                              return date.toLocaleString(locale, {
+                                year: 'numeric',
+                                month: i18n.language === 'zh' ? 'long' : 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: i18n.language === 'zh' ? false : true
+                              });
+                            })()}
                           </TableCell>
                           <TableCell>{item.fileName}</TableCell>
                           <TableCell>{item.rowNumber}</TableCell>
-                          <TableCell>{item.algorithm}</TableCell>
+                          <TableCell>{t(`algorithms.${item.algorithm}`)}</TableCell>
                           <TableCell>
                             <Button 
                               size="small" 
