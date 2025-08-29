@@ -28,8 +28,8 @@ cd tauri-app && npm run tauri:dev
 # Rust后端检查
 cd rust-backend && cargo check --lib
 
-# 运行Python版本（生产）
-python src/main.py -a FIFO -i 流水.xlsx
+# 运行Python版本（已移除，现使用Rust后端）
+# python src/main.py -a FIFO -i 流水.xlsx
 ```
 
 ### 支持的算法
@@ -39,14 +39,14 @@ python src/main.py -a FIFO -i 流水.xlsx
 
 ## 技术架构
 
-### 当前架构（生产）
-```
-GUI: Tauri → Shell.Command → Python CLI → Excel输出
-```
-
-### 目标架构（开发中）
+### 当前架构（已实现）
 ```
 GUI: Tauri → Rust库直接调用 → Excel输出
+```
+
+### 旧架构（已废弃）
+```
+GUI: Tauri → Shell.Command → Python CLI → Excel输出
 ```
 
 ### 核心模块（Rust后端）
@@ -107,7 +107,6 @@ tauri-app/src/
 ## 重要文件路径
 
 ### 核心文件
-- Python入口: `src/main.py`
 - Rust库入口: `rust-backend/src/lib.rs`
 - Tauri配置: `tauri-app/src-tauri/tauri.conf.json`
 - 主数据文件: `流水.xlsx`

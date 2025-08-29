@@ -41,13 +41,7 @@
 ### 完整项目结构
 ```
 资金追踪/
-├── 📁 src/                          # Python生产版本 (v3.1.0)
-│   ├── main.py                      # Python CLI入口
-│   ├── config.py                    # 全局配置
-│   ├── core/                        # 核心业务逻辑
-│   ├── models/                      # 数据模型
-│   ├── services/                    # 服务层
-│   └── utils/                       # 工具函数
+├── 📁 src/                          # [已删除] Python版本已废弃
 │
 ├── 🦀 rust-backend/                 # Rust后端 (v3.3.3开发中)
 │   ├── src/
@@ -285,8 +279,8 @@ cd tauri-app && npm run tauri:dev
 # Rust后端检查
 cd rust-backend && cargo check --lib
 
-# Python生产版本测试
-python src/main.py -a FIFO -i 流水.xlsx
+# Python版本已废弃，现使用Rust后端
+# python src/main.py -a FIFO -i 流水.xlsx
 
 # 前端开发服务器
 cd tauri-app && npm run dev
