@@ -373,15 +373,27 @@ async fn check_system_env() -> Result<serde_json::Value, String> {
         Err(_) => false,
     };
     
-    // 检查工作目录权限
-    let work_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // 检查工作目录权限 - 使用用户数据目录而不是当前工作目录
+    let work_dir = if is_dev_mode {
+        // 开发模式：使用当前项目目录
+        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+    } else {
+        // 生产模式：使用用户文档目录，避免权限问题
+        dirs::document_dir()
+            .map(|d| d.join("FLUX Analysis System"))
+            .unwrap_or_else(|| {
+                // 如果无法获取文档目录，使用用户主目录
+                dirs::home_dir()
+                    .map(|h| h.join("FLUX Analysis System"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            })
+    };
+    
     let work_dir_writable = match std::fs::create_dir_all(&work_dir.join("temp_analysis_results")) {
         Ok(_) => true,
         Err(e) => {
-            if is_dev_mode {
-                println!("Dev mode: Cannot create temp_analysis_results directory: {}", e);
-                println!("Working directory: {}", work_dir.display());
-            }
+            println!("Cannot create temp_analysis_results directory: {}", e);
+            println!("Working directory: {}", work_dir.display());
             false
         }
     };

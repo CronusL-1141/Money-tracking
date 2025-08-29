@@ -34,11 +34,21 @@ export class TempFileManager {
    */
   static async getTempDirectoryPath(): Promise<string> {
     try {
-      const appDir = await invoke('get_app_directory') as string;
-      return await join(appDir, this.TEMP_DIR_NAME);
+      // 检查当前是否为开发模式
+      const systemEnv = await invoke('check_system_env') as any;
+      
+      if (systemEnv.is_dev_mode) {
+        // 开发模式：使用项目目录
+        const appDir = await invoke('get_app_directory') as string;
+        return await join(appDir, this.TEMP_DIR_NAME);
+      } else {
+        // 生产模式：使用用户文档目录，与Rust后端逻辑一致
+        const workDir = systemEnv.work_directory as string;
+        return await join(workDir, this.TEMP_DIR_NAME);
+      }
     } catch (error) {
       // 如果获取应用目录失败，使用相对路径
-      console.warn('Failed to get app directory, using relative path:', error);
+      console.warn('Failed to get temp directory path, using relative path:', error);
       return this.TEMP_DIR_NAME;
     }
   }

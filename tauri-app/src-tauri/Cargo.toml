@@ -1,8 +1,8 @@
 [package]
-name = "fifo-audit-desktop"
-version = "2.0.0"
-description = "FIFO资金追踪审计系统桌面版"
-authors = ["审计团队"]
+name = "flux-analysis-desktop"
+version = "3.3.4"
+description = "FLUX资金追踪分析系统桌面版"
+authors = ["刘光浚"]
 license = "MIT"
 repository = ""
 edition = "2021"

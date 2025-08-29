@@ -7,8 +7,8 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "FLUX Analysis System",
-    "version": "2.0.0"
+    "productName": "FLUX资金追踪分析系统",
+    "version": "3.3.4"
   },
   "tauri": {
     "allowlist": {
@@ -74,7 +74,7 @@
     },
     "bundle": {
       "active": true,
-      "targets": ["app", "nsis"],
+      "targets": ["app", "msi", "nsis"],
       "identifier": "com.audit.fifo.desktop",
       "icon": [
         "icons/icon.ico"
@@ -84,7 +84,11 @@
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "timestampUrl": "",
+        "nsis": {
+          "installMode": "perMachine",
+          "languages": ["SimpChinese", "English"]
+        }
       },
       "externalBin": [],
       "resources": []

@@ -1,13 +1,13 @@
 [package]
-name = "audit-backend"
-version = "1.0.0"
+name = "flux-backend"
+version = "3.3.4"
 edition = "2021"
-description = "FIFO资金追踪审计系统 Rust后端"
-authors = ["审计团队"]
+description = "FLUX资金追踪分析系统 Rust后端"
+authors = ["刘光浚"]
 license = "MIT"
 
 [[bin]]
-name = "audit-cli"
+name = "flux-cli"
 path = "src/bin/main.rs"
 
 [[bin]]

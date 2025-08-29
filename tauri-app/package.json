@@ -1,10 +1,10 @@
 {
-  "name": "case-fund-tracking-system",
+  "name": "flux-analysis-system",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.3.4",
   "type": "module",
-  "description": "涉案资金追踪分析系统桌面版",
-  "author": "审计团队",
+  "description": "FLUX资金追踪分析系统桌面版",
+  "author": "刘光浚",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -491,8 +491,20 @@ impl AuditService {
         use std::fs;
         use std::path::PathBuf;
         
-        // 创建临时目录
-        let temp_dir = PathBuf::from("temp_analysis_results");
+        // 创建临时目录 - 使用用户数据目录而不是当前工作目录
+        let temp_dir = if cfg!(debug_assertions) {
+            // 开发模式：项目目录下的临时文件夹
+            PathBuf::from("temp_analysis_results")
+        } else {
+            // 生产模式：用户文档目录下的临时文件夹
+            dirs::document_dir()
+                .map(|d| d.join("FLUX Analysis System").join("temp_analysis_results"))
+                .unwrap_or_else(|| {
+                    dirs::home_dir()
+                        .map(|h| h.join("FLUX Analysis System").join("temp_analysis_results"))
+                        .unwrap_or_else(|| PathBuf::from("temp_analysis_results"))
+                })
+        };
         if !temp_dir.exists() {
             fs::create_dir_all(&temp_dir)
                 .map_err(|e| AuditError::config_error(&format!("创建临时目录失败: {}", e)))?;
