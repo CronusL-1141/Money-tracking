@@ -57,7 +57,7 @@ const SettingsPage: React.FC = () => {
   const [storageStats, setStorageStats] = useState<{ count: number; lastSaved?: string } | null>(null);
   const [analysisStats, setAnalysisStats] = useState<{ count: number; lastAnalysis?: string; totalSize?: number } | null>(null);
   const [tempFileStats, setTempFileStats] = useState<TempDirectoryStats | null>(null);
-  const [appVersion, setAppVersion] = useState<string>('v2.0.0-Rust-Native');
+  const [appVersion, setAppVersion] = useState<string>('v3.3.4-FLUX-System');
   const isDev = process.env.NODE_ENV === 'development';
   const [systemEnv, setSystemEnv] = useState<SystemEnvStatus | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(false);
@@ -168,7 +168,7 @@ const SettingsPage: React.FC = () => {
 
   // 获取应用版本
   const loadAppVersion = () => {
-    setAppVersion(isDev ? 'v2.0.0-Dev-Mode' : 'v2.0.0-Rust-Native');
+    setAppVersion(isDev ? 'v3.3.4-Dev-Mode' : 'v3.3.4-FLUX-System');
   };
 
   // 加载设置

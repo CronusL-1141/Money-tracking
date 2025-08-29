@@ -1,3 +1,9 @@
+/*
+ * FLUX资金追踪分析系统 v3.3.4
+ * Copyright (c) 2025 刘光浚
+ * 开发完成日期: 2025年8月28日
+ */
+
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

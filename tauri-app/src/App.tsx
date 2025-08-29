@@ -1,3 +1,9 @@
+/*
+ * FLUX资金追踪分析系统 v3.3.4
+ * Copyright (c) 2025 刘光浚
+ * 开发完成日期: 2025年8月28日
+ */
+
 import React, { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Box, CircularProgress, Alert, useTheme } from "@mui/material";

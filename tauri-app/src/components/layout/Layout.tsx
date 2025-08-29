@@ -228,7 +228,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             fontSize: '0.75rem',
             letterSpacing: '0.5px'
           }}>
-            v2.0.0-Dev
+            v3.3.4-FLUX
           </Typography>
         </Box>
       </Box>
