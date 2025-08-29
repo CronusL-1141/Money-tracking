@@ -185,7 +185,6 @@
     "auto_save": "Auto Save",
     "notifications": "Notifications",
     "max_history_records": "Max History Records",
-    "python_environment": "Python Environment",
     "environment_status": "Environment Status",
     "check_environment": "Check Environment",
     "app_update": "Application Update",
@@ -228,7 +227,6 @@
       "backend_names": {
         "rust_native_dev": "Rust Native Backend (Development Mode)",
         "rust_native_prod": "Rust Native Backend (Production Mode)",
-        "python_backend": "Python Backend"
       }
     },
     "system_architecture": {
@@ -277,13 +275,13 @@
     },
     "legacy_version_info": {
       "dev_version_desc": "Development mode version for testing and debugging. Official release version will be packaged as standalone installer.",
-      "standalone_version_desc": "Standalone installer version with built-in Rust high-performance engine, no Python environment needed, one-click installation ready to use.",
+      "standalone_version_desc": "Standalone installer version with built-in Rust high-performance engine, one-click installation ready to use.",
       "software_type": "Software Type",
       "software_type_desc": "Independent desktop application, installation-free dependencies",
       "update_method": "Update Method",
       "update_method_desc": "Update by installing new version installer package",
       "technical_advantage": "Technical Advantage", 
-      "technical_advantage_desc": "Native Rust implementation, processing speed 3-5x faster than Python version"
+      "technical_advantage_desc": "Native Rust implementation, high-performance processing engine"
     }
   },
   
@@ -377,7 +375,7 @@
       "drag_drop_message": "Please drag files directly to the application window, or click browse button to select files",
       "independent_version": "Independent version",
       "no_update_needed": "Current version runs independently, no network update needed",
-      "ui_stopped": "UI stopped updating, Python process may still be running in background"
+      "ui_stopped": "UI stopped updating, backend process may still be running in background"
     }
   },
   
@@ -386,7 +384,7 @@
     "analysis_failed": "Analysis failed",
     "network_error": "Network error",
     "unknown_error": "Unknown error occurred",
-    "python_not_available": "Python environment is not available, please check if Python is properly installed",
+    "backend_not_available": "Backend environment is not available, please check system status",
     "initialization_failed": "System initialization failed",
     "system_error": "System error"
   },
@@ -439,7 +437,7 @@
       "ready_to_analyze": "Ready to analyze, click to start",
       "select_file_first": "Please select input file first",
       "query_log_placeholder": "🔍 Time point query logs will be displayed here in real time...",
-      "analysis_log_placeholder": "🔍 Python analysis logs will be displayed here in real time...",
+      "analysis_log_placeholder": "🔍 Backend analysis logs will be displayed here in real time...",
       "text_selection_hint": "Supports text selection and copy-paste"
     },
     "labels": {
@@ -524,13 +522,7 @@
     "update_notifications_disabled": "Disabled in standalone version (no network required)",
     "environment_status_normal": "Normal",
     "environment_status_error": "Error",
-    "python_path": "Python Path",
-    "standalone_version_description": "Standalone version, no network updates required. All features are fully available.",
-    "python_version": "Python Version",
-    "python_env_check": "Python Environment Check",
-    "python_available": "Python {{version}} is available",
-    "python_not_available": "Python environment is not available",
-    "click_check_env_hint": "Click the check environment button to verify Python configuration"
+    "standalone_version_description": "Standalone version, no network updates required. All features are fully available."
   },
 
   "time_cleanup_dialog": {

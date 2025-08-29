@@ -69,8 +69,6 @@ const SettingsPage: React.FC = () => {
       return t('settings.system_environment.backend_names.rust_native_dev', 'Rust Native Backend (Development Mode)');
     } else if (backendEngine.includes('Rust Native Backend')) {
       return t('settings.system_environment.backend_names.rust_native_prod', 'Rust Native Backend (Production Mode)');
-    } else if (backendEngine.includes('Python')) {
-      return t('settings.system_environment.backend_names.python_backend', 'Python Backend');
     }
     return backendEngine; // 如果不匹配任何模式，返回原始值
   };

@@ -46,11 +46,11 @@ class BackendTester {
     
     try {
       // 1. 基础环境测试
-      await this.runTest('检查Python环境', async () => {
+      await this.runTest('检查后端环境', async () => {
         const result = await window.__TAURI__.invoke('check_python_env');
-        console.log('Python环境信息:', result);
-        if (!result.python_available) {
-          throw new Error('Python environment not available');
+        console.log('后端环境信息:', result);
+        if (!result.backend_engine || !result.backend_version) {
+          throw new Error('Backend environment not available');
         }
         return result;
       });

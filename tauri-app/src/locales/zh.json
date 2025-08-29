@@ -166,7 +166,6 @@
     "auto_save": "自动保存",
     "notifications": "通知",
     "max_history_records": "最大历史记录数",
-    "python_environment": "Python环境",
     "check_environment": "检查环境",
     "environment_status": "环境状态",
     "data_management": "数据管理",
@@ -269,13 +268,13 @@
     },
     "legacy_version_info": {
       "dev_version_desc": "开发模式版本，用于测试和调试。正式发布版本将打包为独立安装包。",
-      "standalone_version_desc": "独立安装包版本，内置Rust高性能引擎，无需Python环境，一键安装即可使用。",
+      "standalone_version_desc": "独立安装包版本，内置Rust高性能引擎，一键安装即可使用。",
       "software_type": "软件类型",
       "software_type_desc": "独立桌面应用程序，免安装依赖",
       "update_method": "更新方式",
       "update_method_desc": "通过安装新版本安装包进行更新",
       "technical_advantage": "技术优势",
-      "technical_advantage_desc": "Rust原生实现，处理速度比Python版本提升3-5倍"
+      "technical_advantage_desc": "Rust原生实现，高性能处理引擎"
     }
   },
   
@@ -307,7 +306,7 @@
   "errors": {
     "system_error": "系统错误",
     "initialization_failed": "系统初始化失败",
-    "python_not_available": "Python环境不可用，请检查Python是否正确安装",
+    "backend_not_available": "后端环境不可用，请检查系统状态",
     "file_not_found": "找不到指定文件",
     "file_read_error": "文件读取错误",
     "analysis_failed": "分析失败",
@@ -377,7 +376,7 @@
       "drag_drop_message": "请直接拖拽文件到应用窗口，或点击浏览按钮选择文件",
       "independent_version": "独立版本",
       "no_update_needed": "当前为独立运行版本，无需联网更新功能",
-      "ui_stopped": "UI已停止更新，Python进程可能仍在后台运行"
+      "ui_stopped": "UI已停止更新，后端进程可能仍在后台运行"
     }
   },
   
@@ -445,7 +444,7 @@
       "ready_to_analyze": "准备就绪，点击开始分析",
       "select_file_first": "请先选择输入文件",
       "query_log_placeholder": "🔍 时点查询日志将实时显示在此处...",
-      "analysis_log_placeholder": "🔍 Python分析日志将实时显示在此处...",
+      "analysis_log_placeholder": "🔍 后端分析日志将实时显示在此处...",
       "text_selection_hint": "支持文本选择和复制粘贴"
     },
     "labels": {
@@ -530,14 +529,8 @@
     "update_notifications_disabled": "独立版本已禁用（无需联网）",
     "environment_status_normal": "正常",
     "environment_status_error": "异常",
-    "python_path": "Python路径",
     "current_version": "当前版本",
     "standalone_version_description": "独立运行版本，无需联网更新。所有功能完整可用。",
-    "python_version": "Python版本",
-    "python_env_check": "Python环境检查",
-    "python_available": "Python {{version}} 可用",
-    "python_not_available": "Python环境不可用",
-    "click_check_env_hint": "点击检查环境按钮来验证Python配置",
     "app_update": "应用更新",
     "version_info": "版本信息",
     "check_failed_state": "检查失败",
