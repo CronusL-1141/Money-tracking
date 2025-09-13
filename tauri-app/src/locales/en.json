@@ -226,7 +226,7 @@
       "check_success_message": "System running normally, {{backend_engine}} {{backend_version}} ready.",
       "backend_names": {
         "rust_native_dev": "Rust Native Backend (Development Mode)",
-        "rust_native_prod": "Rust Native Backend (Production Mode)",
+        "rust_native_prod": "Rust Native Backend (Production Mode)"
       }
     },
     "system_architecture": {

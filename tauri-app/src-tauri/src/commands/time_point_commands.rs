@@ -3,7 +3,7 @@
 //! 使用Rust后端直接实现，不再依赖Python
 
 use tauri::{command, State};
-use audit_backend::{TimePointService, TimePointQueryRequest, TimePointQueryResult};
+use flux_backend::{TimePointService, TimePointQueryRequest, TimePointQueryResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use crate::{AppState, generate_id, QueryHistory, TimePointQuery, QueryResult};
@@ -240,7 +240,7 @@ pub async fn export_fund_pools_excel(
     }
     
     // 使用现有的Excel处理器导出资金池记录
-    use audit_backend::{ExcelProcessor, Config, FundPoolRecord};
+    use flux_backend::{ExcelProcessor, Config, FundPoolRecord};
     use std::path::Path;
     
     let config = Config::new();
@@ -369,8 +369,8 @@ pub async fn export_fund_pools_excel(
                             .unwrap_or("0.00 (0%)")
                             .to_string();
                         
-                        // 使用audit_backend重新导出的Decimal类型
-                        use audit_backend::rust_decimal::Decimal;
+                        // 使用flux_backend重新导出的Decimal类型
+                        use flux_backend::rust_decimal::Decimal;
                         
                         // 创建记录（包含完整的12个字段）- 使用new方法
                         let record = FundPoolRecord::new(

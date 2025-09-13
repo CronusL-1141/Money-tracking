@@ -16,8 +16,6 @@
       </MappedFolder>
     </MappedFolders>
     <LogonCommand>
-      <Command>powershell -Command "Write-Host '🧪 FLUX Analysis System 测试环境已启动' -ForegroundColor Green; Write-Host '📦
-  安装包位置: C:\TestInstallers' -ForegroundColor Blue; Write-Host '📊 测试数据: C:\TestData\流水.xlsx' -ForegroundColor Blue;
-  Read-Host '按回车键继续'"</Command>
+      <Command>powershell -Command "Write-Host '🧪 FLUX Analysis System 测试环境已启动' -ForegroundColor Green; Write-Host '📦 安装包位置: C:\TestInstallers' -ForegroundColor Blue; Write-Host '📊 原始测试数据: C:\TestData\流水.xlsx' -ForegroundColor Blue; Write-Host '🔒 脱敏测试数据: C:\TestData\脱敏流水.xlsx' -ForegroundColor Cyan; Write-Host '' -ForegroundColor White; Write-Host '✨ 新增脱敏数据特性:' -ForegroundColor Yellow; Write-Host '  • 9,848条完全脱敏的交易记录' -ForegroundColor White; Write-Host '  • 500+个资金池产品（理财/投资/保险/银行卡）' -ForegroundColor White; Write-Host '  • 6年时间跨度，支持完整算法测试' -ForegroundColor White; Write-Host '  • 可用于软著演示和用户培训' -ForegroundColor White; Write-Host '' -ForegroundColor White; Write-Host '🚀 建议测试流程:' -ForegroundColor Green; Write-Host '  1. 先测试脱敏数据验证系统功能' -ForegroundColor White; Write-Host '  2. 使用原始数据进行性能基准测试' -ForegroundColor White; Write-Host '  3. 对比两套数据的算法结果一致性' -ForegroundColor White; Read-Host '按回车键继续'"</Command>
     </LogonCommand>
   </Configuration>

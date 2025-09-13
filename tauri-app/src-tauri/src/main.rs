@@ -22,7 +22,7 @@ use regex::Regex;
 use std::sync::Arc;
 
 // 引入Rust后端库
-use audit_backend::{AuditService, TauriAuditConfig, TimePointService, TimePointQueryRequest, TimePointQueryResult};
+use flux_backend::{AuditService, TauriAuditConfig, TimePointService, TimePointQueryRequest, TimePointQueryResult};
 
 // 引入模块化命令
 mod commands;
@@ -156,7 +156,7 @@ pub struct AppState {
     pub app_config: Mutex<AppConfig>,
     pub audit_service: Arc<AuditService>,  // 添加Rust后端服务
     pub last_full_query: Mutex<Option<(String, String)>>, // (file_path, algorithm) 用于缓存判定
-    pub time_point_service: Mutex<Option<audit_backend::services::TimePointService>>, // 时点查询服务（支持缓存）
+    pub time_point_service: Mutex<Option<flux_backend::services::TimePointService>>, // 时点查询服务（支持缓存）
 }
 
 // Tauri命令：获取可用算法列表
