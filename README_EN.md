@@ -1,53 +1,53 @@
-# FLUX资金追踪分析系统
+# FLUX Financial Flow Analysis System
 
 <div align="center">
 
-**🌍 语言 / Language**: **中文** | [English](./README_EN.md)
+**🌍 Language / 语言**: [中文](./README.md) | **English**
 
 </div>
 
 <div align="center">
 
-![版本](https://img.shields.io/badge/版本-v3.3.4-blue)
-![平台](https://img.shields.io/badge/平台-Windows-lightgrey)
-![开发语言](https://img.shields.io/badge/开发语言-Rust%20%2B%20TypeScript-orange)
-![许可证](https://img.shields.io/badge/许可证-MIT-green)
+![Version](https://img.shields.io/badge/version-v3.3.4-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Language](https://img.shields.io/badge/language-Rust%20%2B%20TypeScript-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**司法审计专用工具 - 检测公款挪用、职务侵占等经济犯罪行为**
+**Professional Judicial Audit Tool - Detecting Misappropriation of Public Funds and Economic Crimes**
 
 </div>
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 💾 直接下载安装
-想要立即使用？直接下载安装包即可：
+### 💾 Direct Download & Installation
+Want to use it immediately? Download the installer directly:
 
-**⬇️ [点击下载 FLUX资金追踪分析系统_3.3.4_x64-setup.exe](./FLUX资金追踪分析系统_3.3.4_x64-setup.exe)**
+**⬇️ [Download FLUX Financial Flow Analysis System_3.3.4_x64-setup.exe](./FLUX资金追踪分析系统_3.3.4_x64-setup.exe)**
 
-- 📦 **文件大小**: 约25MB
-- 🖥️ **系统要求**: Windows 10/11 x64
-- ⚡ **安装时间**: 1-2分钟
-- 🔧 **无需配置**: 安装即用，无需额外依赖
+- 📦 **File Size**: ~25MB
+- 🖥️ **System Requirements**: Windows 10/11 x64
+- ⚡ **Installation Time**: 1-2 minutes
+- 🔧 **No Configuration**: Ready to use after installation, no additional dependencies required
 
 ---
 
-## 📋 项目介绍
+## 📋 Project Overview
 
-**FLUX资金追踪分析系统**是一款专为司法审计设计的桌面应用程序，能够精确分析银行流水数据，识别资金挪用、职务侵占等经济犯罪行为模式。
+**FLUX Financial Flow Analysis System** is a desktop application specifically designed for judicial auditing. It can precisely analyze bank transaction data and identify patterns of fund misappropriation, embezzlement, and other economic crimes.
 
-### 🎯 核心功能
-- **📊 智能流水分析**: 支持FIFO（先进先出）和差额计算法两种算法
-- **🔍 时点精确查询**: 可查询任意时间点的资金状态
-- **📈 投资产品追踪**: 跟踪资金池和投资产品的资金流向
-- **📋 历史记录管理**: 智能管理分析历史，支持文件状态检测
-- **🌍 多语言支持**: 中英文界面切换
-- **🌙 主题切换**: 支持明亮/暗黑主题模式
+### 🎯 Core Features
+- **📊 Intelligent Flow Analysis**: Supports both FIFO (First In First Out) and Balance Method algorithms
+- **🔍 Precise Time-Point Queries**: Query financial status at any specific point in time
+- **📈 Investment Product Tracking**: Track fund flows in investment pools and products
+- **📋 History Management**: Smart analysis history management with file status detection
+- **🌍 Multi-language Support**: Chinese/English interface switching
+- **🌙 Theme Switching**: Support for light/dark theme modes
 
-### 💼 应用场景
-- 🏛️ **司法机关**: 经济犯罪案件资金流向分析
-- 🏢 **审计部门**: 企业资金挪用检测
-- 🏦 **金融机构**: 内部风控和合规审查
-- 📊 **会计事务所**: 财务舞弊调查
+### 💼 Application Scenarios
+- 🏛️ **Judicial Institutions**: Financial flow analysis for economic crime cases
+- 🏢 **Audit Departments**: Corporate fund misappropriation detection
+- 🏦 **Financial Institutions**: Internal risk control and compliance review
+- 📊 **Accounting Firms**: Financial fraud investigation
 
 ---
 
@@ -62,9 +62,9 @@
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   用户界面层     │    │   服务调用层     │    │   算法处理层     │
-│   (前端界面)     │────│   (桥接层)      │────│   (后端引擎)     │
+│   (Frontend)    │────│   (Bridge)      │────│   (Backend)     │
 │                 │    │                 │    │                 │
-│  React + TS     │    │  Tauri + Rust   │    │  纯Rust实现     │
+│  React + TS     │    │  Tauri + Rust   │    │  Pure Rust      │
 │  现代化GUI      │    │  直接调用       │    │  核心算法引擎    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
