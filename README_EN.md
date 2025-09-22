@@ -51,32 +51,63 @@ Want to use it immediately? Download the installer directly:
 
 ---
 
-## 🏗️ 系统架构
+## 🏗️ System Architecture
 
-### 技术架构图
+### Technical Architecture
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FLUX资金追踪分析系统                       │
-│                   (纯Rust + Tauri架构)                      │
+│                FLUX Financial Flow Analysis System           │
+│                  (Pure Rust + Tauri Architecture)           │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   用户界面层     │    │   服务调用层     │    │   算法处理层     │
+│   Frontend UI   │    │   Service Layer │    │   Algorithm     │
 │   (Frontend)    │────│   (Bridge)      │────│   (Backend)     │
 │                 │    │                 │    │                 │
 │  React + TS     │    │  Tauri + Rust   │    │  Pure Rust      │
-│  现代化GUI      │    │  直接调用       │    │  核心算法引擎    │
+│  Modern GUI     │    │  Direct Call    │    │  Core Engine    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  页面和组件      │    │  命令和接口      │    │  数据处理模块    │
-│  • 首页         │    │  • 审计分析      │    │  • Excel处理    │
-│  • 审计页面      │    │  • 时点查询      │    │  • 数据验证     │
-│  • 时点查询      │    │  • 历史管理      │    │  • 算法计算     │
-│  • 设置页面      │    │  • 文件操作      │    │  • 结果输出     │
+│  Pages & Components │    │  Commands & APIs │    │  Data Processing│
+│  • Home         │    │  • Audit Analysis │    │  • Excel Handler│
+│  • Audit Page   │    │  • Time Query    │    │  • Data Validation│
+│  • Time Query   │    │  • History Mgmt  │    │  • Algorithm    │
+│  • Settings     │    │  • File Ops      │    │  • Output       │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
+
+### 🔄 Data Processing Flow
+```
+Excel Input → Data Validation → Algorithm Analysis → Result Output → History Storage
+     ↓              ↓                   ↓               ↓            ↓
+  📄Excel File   🔍Integrity Check   🧮FIFO/Balance  📊Excel Report  💾Local Store
+```
+
+---
+
+## 📱 Feature Pages Overview
+
+### 🏠 Homepage (Navigation)
+**Function**: System navigation and quick access center
+- 📋 **Left Navigation**: Quick page switching for analysis, time query, and settings
+- 🎨 **Theme Toggle**: Light/Dark theme switch at bottom
+- 🌍 **Language Toggle**: Chinese/English language switch at bottom
+- 🚀 **Quick Access**: Intuitive page navigation for all function modules
+
+<div align="center">
+<table>
+<tr>
+<td><img src="docs/images/homepage-chinese-dark.png" alt="Chinese Dark Theme" width="400"/></td>
+<td><img src="docs/images/homepage-english-light.png" alt="English Light Theme" width="400"/></td>
+</tr>
+<tr>
+<td align="center"><b>🌚 Chinese + Dark Theme</b></td>
+<td align="center"><b>🌞 English + Light Theme</b></td>
+</tr>
+</table>
+</div>
 
 ### 🔄 数据处理流程
 ```
