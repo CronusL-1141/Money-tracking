@@ -10,7 +10,7 @@
 
 ![版本](https://img.shields.io/badge/版本-v3.3.4-blue)
 ![平台](https://img.shields.io/badge/平台-Windows-lightgrey)
-![开发语言](https://img.shields.io/badge/开发语言-Rust%20%2B%20TypeScript-orange)
+![开发语言](https://img.shields.io/badge/开发语言-TypeScript%20%2B%20Rust-orange)
 ![许可证](https://img.shields.io/badge/许可证-MIT-green)
 
 **司法审计专用工具 - 检测公款挪用、职务侵占等经济犯罪行为**
@@ -346,7 +346,7 @@ Excel文件输入 → 数据验证修复 → 算法分析 → 结果输出 → �
 - **前端**: React 18 + TypeScript + Vite
 - **后端**: Rust + Tauri
 - **UI库**: Material-UI (MUI)
-- **构建工具**: Cargo + npm
+- **构建工具**: npm + Cargo
 
 ### 系统要求
 - **操作系统**: Windows 10/11 (x64)

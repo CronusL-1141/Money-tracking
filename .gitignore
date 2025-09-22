@@ -5,6 +5,9 @@
 *.deb
 *.rpm
 
+# 例外：允许发布版本的安装包
+!FLUX资金追踪分析系统_*.exe
+
 # Python相关
 __pycache__/
 *.pyc
@@ -117,3 +120,11 @@ tests/
 # 开发专用文件（不上传到Git）
 CLAUDE.md
 **/CLAUDE.md
+IMAGE_GUIDE.md
+
+# 大文件和媒体文件（根据需要排除）
+# docs/images/*.png
+# docs/images/*.jpg
+# docs/images/*.jpeg
+# 注意：如果图片文件较小(<2MB)可以提交到Git
+# 如果图片文件较大(>5MB)建议使用Git LFS或外部存储

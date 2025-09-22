@@ -10,7 +10,7 @@
 
 ![Version](https://img.shields.io/badge/version-v3.3.4-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Language](https://img.shields.io/badge/language-Rust%20%2B%20TypeScript-orange)
+![Language](https://img.shields.io/badge/language-TypeScript%20%2B%20Rust-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Professional Judicial Audit Tool - Detecting Misappropriation of Public Funds and Economic Crimes**
