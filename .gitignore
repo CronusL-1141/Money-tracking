@@ -102,3 +102,14 @@ QUICK_START.md
 STAGE_1_TOOL_LAYER_VALIDATION_SUMMARY.md
 # 开发测试目录
 tests/
+
+# 敏感数据文件（审计原始数据，不上传到Git）
+流水.xlsx
+脱敏流水.xlsx
+原始数据/
+**/流水.xlsx
+**/*流水*.xlsx
+
+# 敏感文档和操作说明
+操作说明*.docx
+**/操作说明*.docx
