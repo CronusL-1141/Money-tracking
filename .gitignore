@@ -113,3 +113,7 @@ tests/
 # 敏感文档和操作说明
 操作说明*.docx
 **/操作说明*.docx
+
+# 开发专用文件（不上传到Git）
+CLAUDE.md
+**/CLAUDE.md
